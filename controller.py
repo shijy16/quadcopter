@@ -4,10 +4,14 @@ import numpy as np
 import time
 import math
 import gearControl
+import util
 
 PI = 3.1415926
 
 class PlaneCotroller:
+    #=============================================================#
+    #    following functions only used in upper class functions   #
+    #=============================================================#
     def __init__(self,cid):
         self.clientId = cid
         err, self.copter = vrep.simxGetObjectHandle(self.clientId, "Quadricopter_base",
@@ -52,16 +56,6 @@ class PlaneCotroller:
     def down_gear(self):
         gearControl.send_gear_commands(self.clientId, 0.0, 0.0, self.gearHandle1, self.gearHandle2)
 
-    def take_off(self):
-        self.send_power_commands(9)
-        self.up_gear()
-
-    def landing(self):
-        self.down_gear()
-        time.sleep(1)
-        self.send_power_commands(3)
-        time.sleep(3)
-        self.send_power_commands(0)
 
     def set_object_pos(self,pos,obj):
         vrep.simxSetObjectPosition(self.clientId,obj,-1,pos,self.vrep_mode)
@@ -144,6 +138,17 @@ class PlaneCotroller:
                 cur_ori =self.get_object_orientation(self.copter)[2]
                 time.sleep(0.1)
 
+
+    #=============================================================#
+    #        use following functions to controll the plane        #
+    #=============================================================#
+
+    def get_camera_pic(self,camera_pos):
+        if camera_pos == 1:
+            return util.save_pic('zed_vision1',self.clientId)
+        else:
+            return util.save_pic('zed_vision0',self.clientId)
+
     def move_to(self,dest):
         print(self.target_pos)
         dir = [dest[0] - self.target_pos[0],dest[1] - self.target_pos[1],dest[2] - self.target_pos[2]]
@@ -189,7 +194,19 @@ class PlaneCotroller:
         raw_bytes = (ctypes.c_ubyte * len(packedData)).from_buffer_copy(packedData) 
         err = vrep.simxSetStringSignal(self.clientId, "jacohand",
                                         raw_bytes,
-                                        self.vrep_mode)          
+                                        self.vrep_mode)       
+
+    def take_off(self):
+        self.send_power_commands(9)
+        self.up_gear()
+
+    def landing(self):
+        self.down_gear()
+        time.sleep(1)
+        self.send_power_commands(3)
+        time.sleep(3)
+        self.send_power_commands(0)   
+
 
 class MainController:
     def __init__(self, *args, **kwargs):
@@ -197,6 +214,9 @@ class MainController:
         vrep.simxFinish(-1) # just in case, close all opened connections
         self.clientId=vrep.simxStart('127.0.0.1',19997,True,True,5000,5) # Connect to V-REP, set a very large time-out for blocking commands
     
+    #=============================================================#
+    #                 don't change this function                  #
+    #=============================================================#
     def startSimulation(self):
         if self.clientId!=-1:
             #+++++++++++++++++++++++++++++++++++++++++++++
@@ -215,9 +235,14 @@ class MainController:
         print ('Simulation ended')
         vrep.simxStopSimulation(self.clientId,vrep.simx_opmode_oneshot)
     
+    #=============================================================#
+    #                 simulation runs here                        #
+    #=============================================================#
     def run_simulation(self):
         planeController = PlaneCotroller(self.clientId)
         planeController.take_off()
+        planeController.get_camera_pic(1)
+        planeController.get_camera_pic(2)
         # while(True):
         #     planeController.set_target_orientation([0,0,0])
         #     planeController.set_target_pos(planeController.get_object_pos(planeController.copter))
