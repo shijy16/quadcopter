@@ -3,6 +3,7 @@ import ctypes
 import numpy as np
 import time
 import math
+import gearControl
 
 PI = 3.1415926
 
@@ -13,6 +14,13 @@ class PlaneCotroller:
                                                 vrep.simx_opmode_oneshot_wait )
         err, self.target = vrep.simxGetObjectHandle(self.clientId, "Quadricopter_target",
                                                 vrep.simx_opmode_oneshot_wait )
+        ret, self.gearHandle1 = vrep.simxGetObjectHandle(self.clientId, 'Gear_joint1',
+                                                vrep.simx_opmode_oneshot_wait)
+        ret, self.gearHandle2 = vrep.simxGetObjectHandle(self.clientId, 'Gear_joint2',
+                                                vrep.simx_opmode_oneshot_wait)
+        ret, gear_pos1 = vrep.simxGetJointPosition(self.clientId, self.gearHandle1, vrep.simx_opmode_streaming)
+        ret, gear_pos2 = vrep.simxGetJointPosition(self.clientId, self.gearHandle2, vrep.simx_opmode_streaming)
+        print(ret, gear_pos1, gear_pos2)
         self.vrep_mode = vrep.simx_opmode_oneshot
         while(self.check_target_pos()):
             None
@@ -38,9 +46,22 @@ class PlaneCotroller:
                                         raw_bytes,
                                         self.vrep_mode)
 
+    def up_gear(self):
+        gearControl.send_gear_commands(self.clientId, -60.0, 60.0, self.gearHandle1, self.gearHandle2)
+
+    def down_gear(self):
+        gearControl.send_gear_commands(self.clientId, 0.0, 0.0, self.gearHandle1, self.gearHandle2)
 
     def take_off(self):
-        self.send_power_commands(1)
+        self.send_power_commands(9)
+        self.up_gear()
+
+    def landing(self):
+        self.down_gear()
+        time.sleep(1)
+        self.send_power_commands(3)
+        time.sleep(3)
+        self.send_power_commands(0)
 
     def set_object_pos(self,pos,obj):
         vrep.simxSetObjectPosition(self.clientId,obj,-1,pos,self.vrep_mode)
@@ -150,20 +171,44 @@ class PlaneCotroller:
                 self.target_pos = dest
             self.set_target_pos(self.target_pos)
             time.sleep(0.025)
+            vrep.simxSynchronousTrigger(self.clientId)
             
+    def loose_jacohand(self):
+        motor_values = np.zeros(1)
+        motor_values[0] = -1
+        packedData=vrep.simxPackFloats(motor_values.flatten())
+        raw_bytes = (ctypes.c_ubyte * len(packedData)).from_buffer_copy(packedData) 
+        err = vrep.simxSetStringSignal(self.clientId, "jacohand",
+                                        raw_bytes,
+                                        self.vrep_mode)
 
-
+    def grap_jacohand(self):
+        motor_values = np.zeros(1)
+        motor_values[0] = 1
+        packedData=vrep.simxPackFloats(motor_values.flatten())
+        raw_bytes = (ctypes.c_ubyte * len(packedData)).from_buffer_copy(packedData) 
+        err = vrep.simxSetStringSignal(self.clientId, "jacohand",
+                                        raw_bytes,
+                                        self.vrep_mode)          
 
 class MainController:
     def __init__(self, *args, **kwargs):
         print ('Program started')
         vrep.simxFinish(-1) # just in case, close all opened connections
-        self.clientId=vrep.simxStart('127.0.0.1',19997,True,True,-500000,5) # Connect to V-REP, set a very large time-out for blocking commands
+        self.clientId=vrep.simxStart('127.0.0.1',19997,True,True,5000,5) # Connect to V-REP, set a very large time-out for blocking commands
     
     def startSimulation(self):
         if self.clientId!=-1:
+            #+++++++++++++++++++++++++++++++++++++++++++++
+            step = 0.005
+            vrep.simxSetFloatingParameter(self.clientId, vrep.sim_floatparam_simulation_time_step, step, vrep.simx_opmode_oneshot)
+            # vrep.simxSynchronous(self.clientId, True)
             vrep.simxStartSimulation(self.clientId,vrep.simx_opmode_oneshot)
-            time.sleep(2)
+            # time.sleep(2)
+            vrep.simxSynchronousTrigger(self.clientId)
+            # planeController = PlaneCotroller(self.clientId)
+            # planeController.up_gear()
+            # planeController.down_gear()
             self.run_simulation()
         else:
             print ('Failed connecting to remote API server')
@@ -172,15 +217,21 @@ class MainController:
     
     def run_simulation(self):
         planeController = PlaneCotroller(self.clientId)
+        planeController.take_off()
         # while(True):
         #     planeController.set_target_orientation([0,0,0])
         #     planeController.set_target_pos(planeController.get_object_pos(planeController.copter))
-        planeController.move_to([0,0,0.5])
+        planeController.loose_jacohand()
         time.sleep(3)
-        planeController.move_to([0,0,0.2])
+        planeController.move_to([0,0,0.25])
+        planeController.grap_jacohand()
         time.sleep(3)
-        planeController.take_off()
-        time.sleep(10)
+        planeController.move_to([0,0.5,0.6])
+        planeController.move_to([0,0.5,0.25])
+        planeController.loose_jacohand()
+        # planeController.down_gear()
+        planeController.landing()
+        time.sleep(30)
 
 
 
