@@ -18,7 +18,6 @@ class PlaneCotroller:
                                                 vrep.simx_opmode_oneshot_wait)
         ret, self.gearHandle2 = vrep.simxGetObjectHandle(self.clientId, 'Gear_joint2',
                                                 vrep.simx_opmode_oneshot_wait)
-        print('cnmcnm')
         ret, gear_pos1 = vrep.simxGetJointPosition(self.clientId, self.gearHandle1, vrep.simx_opmode_streaming)
         ret, gear_pos2 = vrep.simxGetJointPosition(self.clientId, self.gearHandle2, vrep.simx_opmode_streaming)
         print(ret, gear_pos1, gear_pos2)
@@ -54,7 +53,15 @@ class PlaneCotroller:
         gearControl.send_gear_commands(self.clientId, 0.0, 0.0, self.gearHandle1, self.gearHandle2)
 
     def take_off(self):
-        self.send_power_commands(1)
+        self.send_power_commands(9)
+        self.up_gear()
+
+    def landing(self):
+        self.down_gear()
+        time.sleep(1)
+        self.send_power_commands(3)
+        time.sleep(3)
+        self.send_power_commands(0)
 
     def set_object_pos(self,pos,obj):
         vrep.simxSetObjectPosition(self.clientId,obj,-1,pos,self.vrep_mode)
@@ -166,8 +173,23 @@ class PlaneCotroller:
             time.sleep(0.025)
             vrep.simxSynchronousTrigger(self.clientId)
             
+    def loose_jacohand(self):
+        motor_values = np.zeros(1)
+        motor_values[0] = -1
+        packedData=vrep.simxPackFloats(motor_values.flatten())
+        raw_bytes = (ctypes.c_ubyte * len(packedData)).from_buffer_copy(packedData) 
+        err = vrep.simxSetStringSignal(self.clientId, "jacohand",
+                                        raw_bytes,
+                                        self.vrep_mode)
 
-
+    def grap_jacohand(self):
+        motor_values = np.zeros(1)
+        motor_values[0] = 1
+        packedData=vrep.simxPackFloats(motor_values.flatten())
+        raw_bytes = (ctypes.c_ubyte * len(packedData)).from_buffer_copy(packedData) 
+        err = vrep.simxSetStringSignal(self.clientId, "jacohand",
+                                        raw_bytes,
+                                        self.vrep_mode)          
 
 class MainController:
     def __init__(self, *args, **kwargs):
@@ -180,7 +202,7 @@ class MainController:
             #+++++++++++++++++++++++++++++++++++++++++++++
             step = 0.005
             vrep.simxSetFloatingParameter(self.clientId, vrep.sim_floatparam_simulation_time_step, step, vrep.simx_opmode_oneshot)
-            vrep.simxSynchronous(self.clientId, True)
+            # vrep.simxSynchronous(self.clientId, True)
             vrep.simxStartSimulation(self.clientId,vrep.simx_opmode_oneshot)
             # time.sleep(2)
             vrep.simxSynchronousTrigger(self.clientId)
@@ -195,20 +217,21 @@ class MainController:
     
     def run_simulation(self):
         planeController = PlaneCotroller(self.clientId)
+        planeController.take_off()
         # while(True):
         #     planeController.set_target_orientation([0,0,0])
         #     planeController.set_target_pos(planeController.get_object_pos(planeController.copter))
-        planeController.up_gear()
-        print('cnm')
-        planeController.down_gear()
-        time.sleep(1)
-        planeController.move_to([0,0,0.5])
-        time.sleep(1)
-        planeController.move_to([0,0,0.2])
-        time.sleep(1)
+        planeController.loose_jacohand()
+        time.sleep(3)
+        planeController.move_to([0,0,0.25])
+        planeController.grap_jacohand()
+        time.sleep(3)
+        planeController.move_to([0,0.5,0.6])
+        planeController.move_to([0,0.5,0.25])
+        planeController.loose_jacohand()
         # planeController.down_gear()
-        planeController.take_off()
-        time.sleep(1)
+        planeController.landing()
+        time.sleep(30)
 
 
 
