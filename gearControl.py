@@ -5,10 +5,15 @@ import time
 RAD = 180/math.pi
 step = 0.005
 
-def send_gear_commands(clientID ,target_degree1, target_degree2):
+def send_gear_commands(clientID ,target_degree1, target_degree2, gearHandle1, gearHandle2):
+	RAD = 180/math.pi
 	lastCmdTime = vrep.simxGetLastCmdTime(clientID)
 	vrep.simxSynchronousTrigger(clientID)
+	count = 0
 	while vrep.simxGetConnectionId(clientID) != -1:
+		count += 1
+		if count > 20:
+			break
 		currCmdTime = vrep.simxGetLastCmdTime(clientID)
 		dt = currCmdTime - lastCmdTime
 
@@ -26,7 +31,7 @@ def send_gear_commands(clientID ,target_degree1, target_degree2):
 
 		lastCmdTime = currCmdTime
 		vrep.simxSynchronousTrigger(clientID)
-		vrep.simxGetPingTime(clientID)
+		# vrep.simxGetPingTime(clientID)
 
 
 # Demo
@@ -53,13 +58,13 @@ if clientID != -1:
 	vrep.simxSynchronousTrigger(clientID)
 	
 	target_degree1 = -60.0
-	target_degree2 = 60.0
-	send_gear_commands(clientID, target_degree1, target_degree2)
-	time.sleep(2)
-	
+	target_degree2 = +60.0
+	send_gear_commands(clientID, target_degree1, target_degree2, gearHandle1, gearHandle2)
+	# time.sleep(2)
+	print('cnm')
 	target_degree1 = 0.0
 	target_degree2 = 0.0
-	send_gear_commands(clientID, target_degree1, target_degree2)
+	send_gear_commands(clientID, target_degree1, target_degree2, gearHandle1, gearHandle2)
 
 	# vrep.simxSetJointPosition(clientID, jointHandle, 90, vrep.simx_opmode_oneshot)
 	# vrep.simxSetJointTargetPosition(clientID, joint, 10, vrep.simx_opmode_oneshot)
