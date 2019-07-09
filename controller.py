@@ -1,264 +1,209 @@
-import vrep
-import ctypes
+# A Set of standard non-neural controllers to benchmark against
 import numpy as np
 import time
-import math
-import gearControl
-import util
+import vrep
+from quadcopter import Quadcopter
 
-PI = 3.1415926
+kkk = 1
 
-class PlaneCotroller:
-    #=============================================================#
-    #    following functions only used in upper class functions   #
-    #=============================================================#
-    def __init__(self,cid):
-        self.clientId = cid
-        err, self.copter = vrep.simxGetObjectHandle(self.clientId, "Quadricopter_base",
-                                                vrep.simx_opmode_oneshot_wait )
-        err, self.target = vrep.simxGetObjectHandle(self.clientId, "Quadricopter_target",
-                                                vrep.simx_opmode_oneshot_wait )
-        ret, self.gearHandle1 = vrep.simxGetObjectHandle(self.clientId, 'Gear_joint1',
-                                                vrep.simx_opmode_oneshot_wait)
-        ret, self.gearHandle2 = vrep.simxGetObjectHandle(self.clientId, 'Gear_joint2',
-                                                vrep.simx_opmode_oneshot_wait)
-        ret, gear_pos1 = vrep.simxGetJointPosition(self.clientId, self.gearHandle1, vrep.simx_opmode_streaming)
-        ret, gear_pos2 = vrep.simxGetJointPosition(self.clientId, self.gearHandle2, vrep.simx_opmode_streaming)
-        print(ret, gear_pos1, gear_pos2)
-        self.vrep_mode = vrep.simx_opmode_oneshot
-        while(self.check_target_pos()):
-            None
+class PD( Quadcopter ):
 
-    def send_motor_commands(self,values ):
-        # Limit motors by max and min values
-        motor_values = np.zeros(4)
-        for i in range(4):
-            motor_values[i] = values[i]
-        packedData=vrep.simxPackFloats(motor_values.flatten())
-        raw_bytes = (ctypes.c_ubyte * len(packedData)).from_buffer_copy(packedData) 
-        err = vrep.simxSetStringSignal(self.clientId, "rotorTargetVelocities",
-                                        raw_bytes,
-                                        self.vrep_mode)
+  def __init__( self, **kwargs ):
+
+    super(PD, self).__init__( **kwargs );
     
-    def send_power_commands(self,power ):
-        # Limit motors by max and min values
-        motor_values = np.zeros(1)
-        motor_values[0] = power
-        packedData=vrep.simxPackFloats(motor_values.flatten())
-        raw_bytes = (ctypes.c_ubyte * len(packedData)).from_buffer_copy(packedData) 
-        err = vrep.simxSetStringSignal(self.clientId, "rotorPower",
-                                        raw_bytes,
-                                        self.vrep_mode)
+    k1 = 0.43352026190263104
+    k2 = 2.0 * 4
+    k3 = 0.5388202808181405
+    k4 = 1.65 * 4
+    k5 = 2.5995452450850185
+    k6 = 0.802872750102059 * 8
+    k7 = 0.5990281657438163
+    k8 = 2.8897310746350824 * 4
 
-    def up_gear(self):
-        gearControl.send_gear_commands(self.clientId, -60.0, 60.0, self.gearHandle1, self.gearHandle2)
+    self.gains = np.matrix([[ 0,  0, k2,  0,  0,-k4,  0,  0,  0,  0,  0,  0],
+                            [  0, k1,  0,  0,-k3,  0,-k5,  0,  0, k7,  0,  0],
+                            [-k1,  0,  0, k3,  0,  0,  0,-k5,  0,  0, k7,  0],
+                            [  0,  0,  0,  0,  0,  0,  0,  0,-k6,  0,  0, k8] ])
 
-    def down_gear(self):
-        gearControl.send_gear_commands(self.clientId, 0.0, 0.0, self.gearHandle1, self.gearHandle2)
+    self.rotor_transform = np.matrix([[ 1,-1, 1, 1],
+                                      [ 1,-1,-1,-1],
+                                      [ 1, 1,-1, 1],
+                                      [ 1, 1, 1,-1] ])
 
+    self.state = np.matrix([[0.0],
+                            [0.0],
+                            [0.0],
+                            [0.0],
+                            [0.0],
+                            [0.0],
+                            [0.0],
+                            [0.0],
+                            [0.0],
+                            [0.0],
+                            [0.0],
+                            [0.0],
+                           ])
 
-    def set_object_pos(self,pos,obj):
-        vrep.simxSetObjectPosition(self.clientId,obj,-1,pos,self.vrep_mode)
+    #2.644e+01
+    # self.gravity_compensation = np.matrix([[5.6535],
+    #                                        [5.6535],
+    #                                        [5.6535],
+    #                                        [5.6535],
+    #                                       ])
+    self.gravity_compensation = np.matrix([[9],
+                                           [9],
+                                           [9],
+                                           [9],
+                                          ])
+
+  def control_step( self ):
+
+    self.count += 1
+    if self.count == 10:
+      self.get_target()
+      self.calculate_error()
+      
+      self.state = np.matrix([[self.pos_err[0]],
+                         [self.pos_err[1]],
+                         [self.pos_err[2]],
+                         [self.lin[0]],
+                         [self.lin[1]],
+                         [self.lin[2]],
+                         [self.ori_err[0]],
+                         [self.ori_err[1]],
+                         [self.ori_err[2]],
+                         [self.ang[0]],
+                         [self.ang[1]],
+                         [self.ang[2]],
+                        ])
+      # print(self.state)
+      self.count = 0
+      self.send_motor_commands( self.compute_output() )
+      vrep.simxSynchronousTrigger( self.cid )
+
+  def compute_output( self ):
+    """ Computes the rotor velocities based on PID control """
+
+    motor = self.rotor_transform * (self.gains * self.state) + self.gravity_compensation
+
+    return [motor[0,0], motor[1,0], motor[2,0], motor[3,0]]
+
+class PID( PD ):
+
+  def __init__( self, **kwargs ):
+
+    super(PID, self).__init__(**kwargs);
+
+    i1 = 0.0001/10
+    i2 = 0.05/10
+    i3 = 0#0.0001
+    i4 = 0#0.0001
+
+    self.I_gain = np.matrix([[  0,  0, i2,  0,  0,  0],
+                             [  0, i1,  0,-i3,  0,  0],
+                             [-i1,  0,  0,  0,-i3,  0],
+                             [  0,  0,  0,  0,  0,-i4],
+                            ])
+
+    self.integrals = np.matrix([[0.0], # X
+                                [0.0], # Y
+                                [0.0], # Z
+                                [0.0], # Roll
+                                [0.0], # Pitch
+                                [0.0], # Yaw
+                               ])
+
+  def control_step( self ):
+
+    self.count += 1
+    if self.count == 10:
+      self.get_target()
+      self.calculate_error()
+      
+      self.state = np.matrix([[self.pos_err[0]],
+                         [self.pos_err[1]],
+                         [self.pos_err[2]],
+                         [self.lin[0]],
+                         [self.lin[1]],
+                         [self.lin[2]],
+                         [self.ori_err[0]],
+                         [self.ori_err[1]],
+                         [self.ori_err[2]],
+                         [self.ang[0]],
+                         [self.ang[1]],
+                         [self.ang[2]],
+                        ])
     
-    def get_object_pos(self,obj):
-        err,pos = vrep.simxGetObjectPosition(self.clientId,obj,-1,self.vrep_mode)
-        return pos
+      self.update_integral()
+      self.count = 0
+      self.send_motor_commands( self.compute_output() )
+      vrep.simxSynchronousTrigger( self.cid )
+    else:
+      self.update_integral()
+
+  def update_integral( self ):
+
+    for i in range(3):
+      self.integrals[i,0] += self.pos_err[i]
+      self.integrals[i+3,0] += self.ori_err[i]
+
+  def compute_output( self ):
+    """ Computes the rotor velocities based on PID control """
+
+    motor = self.rotor_transform *\
+        ( self.gains * self.state + self.I_gain * self.integrals ) +\
+        self.gravity_compensation
+
+    return [motor[0,0], motor[1,0], motor[2,0], motor[3,0]]
+
+class PIDt( PID ):
+  """ 
+  PID controller where the error given to the I term uses velocity as well. 
+  It is effectively a task space error.
+  """
+  def __init__( self, fast_i=False, **kwargs ):
+
+    super(PIDt, self).__init__(**kwargs)
+
+    self.integrals = np.matrix([[0.0],
+                                [0.0],
+                                [0.0],
+                                [0.0],
+                               ])
+
+    i1 = 0.001 # Z
+    if fast_i: # XY
+      i2 = 0.01
+    else:
+      i2 = 0.0025
+    i3 = 0.01 # Yaw
+
+    self.I_gain = np.matrix([[i1, 0, 0, 0],
+                             [0, i2, 0, 0],
+                             [0, 0, i2, 0],
+                             [0, 0, 0, i3],
+                            ])
+    k6 = 0.802872750102059 * 8
+    k8 = 2.8897310746350824 * 4
     
-    def get_object_orientation(self,obj):
-        err,ori = vrep.simxGetObjectOrientation(self.clientId,obj,-1,self.vrep_mode)
-        return ori
+    ak1 = 0.026210965785217845
+    ak2 = 2.0 * 13
+    ak3 = 0.027614986033826894
+    ak4 = 1.65 * 13
     
-    def set_target_pos(self,pos):
-        vrep.simxSetObjectPosition(self.clientId,self.target,-1,pos,self.vrep_mode)
-    
-    def get_target_pos(self):
-        err,pos = vrep.simxGetObjectPosition(self.clientId,self.target,-1,self.vrep_mode)
-        return pos
-    
-    def set_target_orientation(self,orientation):
-        vrep.simxSetObjectOrientation(self.clientId,self.target,-1,orientation,self.vrep_mode)
-    
-    def get_target_orientation(self):
-        err,orientation = vrep.simxGetObjectOrientation(self.clientId,self.target,-1,self.vrep_mode)
-        return orientation
-    
-    def check_target_pos(self):
-        for i in range(0,10):
-            self.target_pos = self.get_object_pos(self.copter)
-        if self.target_pos[0] == 0 and self.target_pos[1] == 0 and self.target_pos[2] == 0:
-            return True
-        return False
-    
-    def check_target_orientation(self):
-        self.target_orientation = self.get_target_orientation()
-        if self.target_orientation[0] == 0 and self.target_orientation[1] == 0 and self.target_orientation[2] == 0:
-            return True
-        return False
+    self.adaptive_filter = np.matrix([[  0,  0, ak2,   0,   0,-ak4,  0,  0,  0,  0,  0,  0],
+                                      [  0, ak1,  0,   0,-ak3,   0,  0,  0,  0,  0,  0,  0],
+                                      [-ak1,  0,  0, ak3,   0,   0,  0,  0,  0,  0,  0,  0],
+                                      [  0,   0,  0,   0,   0,   0,  0,  0,-k6,  0,  0, k8]
+                                     ])
 
-    def up(self):
-        if(self.check_target_pos()):
-            return
-        self.target_pos[2] += 0.05
-        self.set_target_pos(self.target_pos)
-    
-    def down(self):
-        if(self.check_target_pos()):
-            return
-        self.target_pos[2] -= 0.05
-        self.set_target_pos(self.target_pos)
-    
-    def get_delta(self,l1,l2):
-        delta = [ abs(l1[0]-l2[0]),abs(l1[1]-l2[1]),abs(l1[2]-l2[2]) ]
-        if delta[0] > delta[1]:
-            if delta[0] > delta[2]:
-                return delta[0]
-            else:
-                return delta[2]
-        elif delta[1] > delta[2]:
-            return delta[1]
-        else:
-            return delta[2]
-    
-    def rotate_to(self,angle):
-        dir = 1
-        target_ori = self.get_target_orientation()[2]
-        if(angle - target_ori < 0 and abs(angle - target_ori) < PI):
-            dir = -1
-        if(angle - target_ori > 0 and abs(angle - target_ori) > PI):
-            dir = -1
-        while(abs(angle - target_ori) > 0.0001):
-            if(abs(target_ori - angle) < PI/9.0):
-                target_ori = angle
-            else:
-                target_ori = target_ori + PI/9.0*dir
-            cur_ori =self.get_object_orientation(self.copter)[2]
-            while(abs(cur_ori - target_ori) > 0.01):
-                print(target_ori)
-                self.set_target_orientation([0,0,target_ori])
-                cur_ori =self.get_object_orientation(self.copter)[2]
-                time.sleep(0.1)
+  def update_integral( self ):
+    self.integrals += self.adaptive_filter * self.state
+    #self.integrals += self.gains * self.state
 
 
-    #=============================================================#
-    #        use following functions to controll the plane        #
-    #=============================================================#
-
-    def get_camera_pic(self,camera_pos):
-        if camera_pos == 1:
-            return util.save_pic('zed_vision1',self.clientId)
-        else:
-            return util.save_pic('zed_vision0',self.clientId)
-
-    def move_to(self,dest):
-        print(self.target_pos)
-        dir = [dest[0] - self.target_pos[0],dest[1] - self.target_pos[1],dest[2] - self.target_pos[2]]
-        len = dir[0]*dir[0] + dir[1]*dir[1] + dir[2]*dir[2]
-        len = math.sqrt(len)
-        dir[0] /= (len*200.0)
-        dir[1] /= (len*200.0)
-        dir[2] /= (len*200.0)
-        while(self.get_delta(self.target_pos,dest) > 0.01):
-            # err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
-            # len = dir[0]*dir[0] + dir[1]*dir[1] + dir[2]*dir[2]
-            # if(math.sqrt(v1[0]*v1[0] + v1[2]*v1[2] + v1[1]*v1[1]) > math.sqrt(len)*195):
-            #     dir[0]*=2
-            #     dir[1]*=2
-            #     dir[2]*=2
-            # else:
-            #     dir[0]/=2
-            #     dir[1]/=2
-            #     dir[2]/=2
-            if(self.get_delta(self.target_pos,dest) > 0.05):
-                self.target_pos[0] += dir[0]
-                self.target_pos[1] += dir[1]
-                self.target_pos[2] += dir[2]
-            else:
-                self.target_pos = dest
-            self.set_target_pos(self.target_pos)
-            time.sleep(0.025)
-            vrep.simxSynchronousTrigger(self.clientId)
-            
-    def loose_jacohand(self):
-        motor_values = np.zeros(1)
-        motor_values[0] = -1
-        packedData=vrep.simxPackFloats(motor_values.flatten())
-        raw_bytes = (ctypes.c_ubyte * len(packedData)).from_buffer_copy(packedData) 
-        err = vrep.simxSetStringSignal(self.clientId, "jacohand",
-                                        raw_bytes,
-                                        self.vrep_mode)
-
-    def grap_jacohand(self):
-        motor_values = np.zeros(1)
-        motor_values[0] = 1
-        packedData=vrep.simxPackFloats(motor_values.flatten())
-        raw_bytes = (ctypes.c_ubyte * len(packedData)).from_buffer_copy(packedData) 
-        err = vrep.simxSetStringSignal(self.clientId, "jacohand",
-                                        raw_bytes,
-                                        self.vrep_mode)       
-
-    def take_off(self):
-        self.send_power_commands(9)
-        self.up_gear()
-
-    def landing(self):
-        self.down_gear()
-        time.sleep(1)
-        self.send_power_commands(3)
-        time.sleep(3)
-        self.send_power_commands(0)   
-
-
-class MainController:
-    def __init__(self, *args, **kwargs):
-        print ('Program started')
-        vrep.simxFinish(-1) # just in case, close all opened connections
-        self.clientId=vrep.simxStart('127.0.0.1',19997,True,True,5000,5) # Connect to V-REP, set a very large time-out for blocking commands
-    
-    #=============================================================#
-    #                 don't change this function                  #
-    #=============================================================#
-    def startSimulation(self):
-        if self.clientId!=-1:
-            #+++++++++++++++++++++++++++++++++++++++++++++
-            step = 0.005
-            vrep.simxSetFloatingParameter(self.clientId, vrep.sim_floatparam_simulation_time_step, step, vrep.simx_opmode_oneshot)
-            # vrep.simxSynchronous(self.clientId, True)
-            vrep.simxStartSimulation(self.clientId,vrep.simx_opmode_oneshot)
-            # time.sleep(2)
-            vrep.simxSynchronousTrigger(self.clientId)
-            # planeController = PlaneCotroller(self.clientId)
-            # planeController.up_gear()
-            # planeController.down_gear()
-            self.run_simulation()
-        else:
-            print ('Failed connecting to remote API server')
-        print ('Simulation ended')
-        vrep.simxStopSimulation(self.clientId,vrep.simx_opmode_oneshot)
-    
-    #=============================================================#
-    #                 simulation runs here                        #
-    #=============================================================#
-    def run_simulation(self):
-        planeController = PlaneCotroller(self.clientId)
-        planeController.take_off()
-        planeController.get_camera_pic(1)
-        planeController.get_camera_pic(2)
-        # while(True):
-        #     planeController.set_target_orientation([0,0,0])
-        #     planeController.set_target_pos(planeController.get_object_pos(planeController.copter))
-        planeController.loose_jacohand()
-        time.sleep(3)
-        planeController.move_to([0,0,0.25])
-        planeController.grap_jacohand()
-        time.sleep(3)
-        planeController.move_to([0,0.5,0.6])
-        planeController.move_to([0,0.5,0.25])
-        planeController.loose_jacohand()
-        # planeController.down_gear()
-        planeController.landing()
-        time.sleep(30)
-
-
-
-mainController = MainController()
-mainController.startSimulation()
+if __name__ == "__main__":
+  cont = PIDt()
+  while True:
+    cont.control_step()
