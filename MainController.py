@@ -65,15 +65,26 @@ class PlaneCotroller:
         err,pos = vrep.simxGetObjectPosition(self.clientId,obj,-1,vrep.simx_opmode_blocking)
         return pos
     
+    def get_current_pos(self):
+        err,pos = self.get_object_pos(self.copter)
+        self.plane_pos = pos
+        return pos
+    
+    def update_pos(self):
+        self.get_current_pos()
+        self.get_target_pos()
+
     def get_object_orientation(self,obj):
         err,ori = vrep.simxGetObjectOrientation(self.clientId,obj,-1,vrep.simx_opmode_blocking)
         return ori
     
     def set_target_pos(self,pos):
+        self.target_pos = pos
         vrep.simxSetObjectPosition(self.clientId,self.target,-1,pos,self.vrep_mode)
     
     def get_target_pos(self):
         err,pos = vrep.simxGetObjectPosition(self.clientId,self.target,-1,vrep.simx_opmode_blocking)
+        self.target_pos = pos
         return pos
     
     def set_target_orientation(self,orientation):
@@ -87,7 +98,7 @@ class PlaneCotroller:
         self.target_pos = self.get_object_pos(self.target)
         if self.target_pos[0] == 0 and self.target_pos[1] == 0 and self.target_pos[2] == 0:
             return True
-        print(self.target_pos)
+        # print(self.target_pos)
         return False
     
     def check_target_orientation(self):
@@ -96,17 +107,18 @@ class PlaneCotroller:
             return True
         return False
 
-    def up(self):
+    def up(self,h=0.05):
         if(self.check_target_pos()):
             return
-        self.target_pos[2] += 0.05
-        self.set_target_pos(self.target_pos)
+        self.target_pos[2] += h
+        self.move_to(self.target_pos)
     
-    def down(self):
+    def down(self,h=0.05):
         if(self.check_target_pos()):
             return
-        self.target_pos[2] -= 0.05
-        self.set_target_pos(self.target_pos)
+        self.target_pos[2] -= h
+        self.move_to(self.target_pos)
+
     
     def get_delta(self,l1,l2):
         delta = [ abs(l1[0]-l2[0]),abs(l1[1]-l2[1]),abs(l1[2]-l2[2]) ]
@@ -151,6 +163,19 @@ class PlaneCotroller:
             return util.save_pic('zed_vision0',self.clientId)
 
     #hard means this move requires high currency
+    def to_height(self,h):
+        if(self.check_target_pos()):
+            return
+        self.target_pos[2] = h
+        self.move_to(self.target_pos,False)
+
+    def move_horizontally(self,x,y):
+        if(self.check_target_pos()):
+            return
+        self.target_pos[0] = x
+        self.target_pos[1] = y
+        self.move_to(self.target_pos)
+
     def move_to(self,dest,hard = True):
         self.set_target_pos(dest)
         time.sleep(3)
@@ -159,7 +184,6 @@ class PlaneCotroller:
             while(self.get_delta(v1,[0,0,0]) > 0.01):
                 time.sleep(0.5)
                 err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
-            print(str(dest) + 'arrived')
             cur = self.get_object_pos(self.copter)
             target_pos = self.get_target_pos()
             delta = [0,0,0]
@@ -170,7 +194,7 @@ class PlaneCotroller:
             target_pos[1] += delta[1]
             target_pos[2] += delta[2]
             self.set_target_pos(target_pos)
-            time.sleep(3)
+            time.sleep(5)
         else:
             while(self.get_delta(v1,[0,0,0]) > 0.05):
                 time.sleep(0.5)
@@ -236,6 +260,13 @@ class PlaneCotroller:
         time.sleep(3)
         self.send_power_commands(-9)  
     
+
+    #mission 2
+    def get_target_platform_pos(self):
+        ret, _, target_platform_pos, _, _ = vrep.simxCallScriptFunction(self.clientId, 'util_funcs', vrep.sim_scripttype_customizationscript, 
+                                        'my_get_target_platform_pos', [], [], [], bytearray(), vrep.simx_opmode_oneshot_wait)
+        return target_platform_pos
+
     def get_target_info(self):
         #try to be stable
         err,ori = vrep.simxGetObjectOrientation(self.clientId,self.copter,-1,self.vrep_mode)
@@ -249,7 +280,7 @@ class PlaneCotroller:
         img2 = self.get_camera_pic(1)
 
         center1,size1 = util.find_target(img1)
-        center2,size2 = util.find_target(img1)
+        center2,size2 = util.find_target(img2)
 
         center = [0,0]
         size = [0,0]
@@ -257,41 +288,70 @@ class PlaneCotroller:
         center[1] = (center1[1] + center2[1])/2.0
         size[0] = (size1[0] + size2[0])/2.0
         size[1] = (size1[1] + size2[1])/2.0
-        return center,size
+        err = 0
+        if(size1[0] == 0):
+            err += 1
+        if(size2[0] == 0):
+            err += 1
+        return err,center,size
     
     def get_target(self):
-        #--------------find the height above target-------------------
+        #goto platform
+        self.to_height(2)
+        platform_pos = self.get_target_platform_pos()
+        print(platform_pos)
+        self.move_horizontally(platform_pos[0],platform_pos[1])
         self.loose_jacohand()
         self.rotate_to(0)
-        center,size = self.get_target_info()
-        print("height beyond target:",94.4/size[0],"target size:",size,"target center:",center)
-        height = 94.4/size[0]
+        err,center,size = self.get_target_info()
+        while(err != 0):
+            #one vision blocked by one finger 
+            if(err == 1):
+                self.move_to([self.target_pos[0] - 0.2,self.target_pos[1],self.target_pos[2]])
+            #no target in visions
+            elif(err == 2):
+                self.up(0.5)
+            err,center,size = self.get_target_info()
+        print('target found')
+        #---------------calculate target pos roughly-------------------
+        print("height beyond target:",85/size[0],"target size:",size,"target center:",center)
+        delta_pos = [0,0]
+        delta_pos[1] = center[0] - 644
+        delta_pos[0] = center[1] - 380
+        delta_pos[0] /= 233.3333
+        delta_pos[1] /= 233.3333
+        print("move to directly above target",delta_pos)
+        self.move_to([self.target_pos[0] - delta_pos[0],self.target_pos[1] + delta_pos[1],self.target_pos[2]])
+
+
+        print("height beyond target:",85/size[0],"target size:",size,"target center:",center)
+        height = 85/size[0]
         print("move up")
         self.move_to([self.target_pos[0],self.target_pos[1],self.target_pos[2]+(3.0-height)])
         time.sleep(3)
 
         #---------------calculate target pos-------------------
-        center,size = self.get_target_info()
-        print("height beyond target:",94.4/size[0],"target size:",size,"target center:",center)
+        err,center,size = self.get_target_info()
+        print("height beyond target:",85/size[0],"target size:",size,"target center:",center)
         delta_pos = [0,0]
-        delta_pos[1] = center[0] - 654
-        delta_pos[0] = center[1] - 382
+        delta_pos[1] = center[0] - 640
+        delta_pos[0] = center[1] - 380
         delta_pos[0] /= 233.3333
         delta_pos[1] /= 233.3333
         print("move to directly above target",delta_pos)
         self.move_to([self.target_pos[0] - delta_pos[0],self.target_pos[1] + delta_pos[1],self.target_pos[2]])
-        time.sleep(5)
+        # time.sleep(5)
         print("move down")
         self.move_to([self.target_pos[0],self.target_pos[1],self.target_pos[2]-2.1])
-        center,size = self.get_target_info()
-        print("height beyond target:",94.4/size[0],"target size:",size,"target center:",center)
+        err,center,size = self.get_target_info()
+        print("height beyond target:",85/size[0],"target size:",size,"target center:",center)
         delta_pos = [0,0]
-        delta_pos[1] = center[0] - 684
+        delta_pos[1] = center[0] - 660
         delta_pos[0] = center[1] - 440
         delta_pos[0] /= 875
         delta_pos[1] /= 875
 
-        height = 94.4/size[0]
+        height = 85/size[0]
         self.move_to([self.target_pos[0] - delta_pos[0],self.target_pos[1] + delta_pos[1],self.target_pos[2]])
         time.sleep(3)
 
@@ -324,12 +384,18 @@ class MainController:
             # vrep.simxSetFloatingParameter(self.clientId, vrep.sim_floatparam_simulation_time_step, step, vrep.simx_opmode_oneshot)
             # vrep.simxSynchronous(self.clientId, True)
             vrep.simxStartSimulation(self.clientId,vrep.simx_opmode_oneshot)
-            # time.sleep(2)
-            # vrep.simxSynchronousTrigger(self.clientId)
-            # planeController = PlaneCotroller(self.clientId)
-            # planeController.up_gear()
-            # planeController.down_gear()
-            self.run_simulation()
+            #init the controller
+            planeController = PlaneCotroller(self.clientId)
+            planeController.take_off()
+            self.pdController = controller.PID(cid=self.clientId)
+
+            #create a thread to controll the move of quadcopter
+            thread.start_new_thread(self.pdThread,())
+            print("thread created")
+            #to be stable
+            planeController.move_to(planeController.get_object_pos(planeController.copter),False)
+            # time.sleep(3)
+            self.run_simulation(planeController)
         else:
             print ('Failed connecting to remote API server')
         print ('Simulation ended')
@@ -338,15 +404,14 @@ class MainController:
     #=============================================================#
     #                 simulation runs here                        #
     #=============================================================#
-    def run_simulation(self):
-        planeController = PlaneCotroller(self.clientId)
-        planeController.take_off()
-        self.pdController = controller.PIDt(cid=self.clientId)
-        #create a thread to controll the move of quadcopter
-        thread.start_new_thread(self.pdThread,())
-        print("thread created")
-        
-        planeController.move_to([0,0,2])
+    def run_simulation(self,planeController):
+        print("run simulation")
+        planeController.move_to([7.225,-10.425,3])
+        print(planeController.get_target_info())
+
+        planeController.move_to([7.225,-10.425,1])
+        print(planeController.get_target_info())
+        planeController.get_target()
         planeController.landing()
 
 

@@ -51,10 +51,11 @@ class PD( Quadcopter ):
     #                                        [5.6535],
     #                                        [5.6535],
     #                                       ])
-    self.gravity_compensation = np.matrix([[9],
-                                           [9],
-                                           [9],
-                                           [9],
+    gc = 9
+    self.gravity_compensation = np.matrix([[gc],
+                                           [gc],
+                                           [gc],
+                                           [gc],
                                           ])
 
   def control_step( self ):
@@ -93,7 +94,7 @@ class PID( PD ):
 
   def __init__( self, **kwargs ):
 
-    super(PID, self).__init__(**kwargs);
+    super(PID, self).__init__(**kwargs)
 
     i1 = 0.0001/10
     i2 = 0.05/10
