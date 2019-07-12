@@ -6,7 +6,7 @@ import math
 import gearControl
 import util
 import controller
-import thread
+import _thread
 PI = 3.1415926
 
 class PlaneCotroller:
@@ -23,6 +23,7 @@ class PlaneCotroller:
                                                 vrep.simx_opmode_oneshot_wait)
         ret, self.gearHandle2 = vrep.simxGetObjectHandle(self.clientId, 'Gear_joint2',
                                                 vrep.simx_opmode_oneshot_wait)
+        self.plane_pos = self.get_object_pos(self.copter)
         # ret, gear_pos1 = vrep.simxGetJointPosition(self.clientId, self.gearHandle1, vrep.simx_opmode_streaming)
         # ret, gear_pos2 = vrep.simxGetJointPosition(self.clientId, self.gearHandle2, vrep.simx_opmode_streaming)
         # print(ret, gear_pos1, gear_pos2)
@@ -66,19 +67,20 @@ class PlaneCotroller:
         return pos
     
     def get_current_pos(self):
-        err,pos = self.get_object_pos(self.copter)
+        pos = self.get_object_pos(self.copter)
         self.plane_pos = pos
         return pos
     
-    def update_pos(self):
-        self.get_current_pos()
-        self.get_target_pos()
+    # def update_pos(self):
+    #     self.get_current_pos()
+    #     self.get_target_pos()
 
     def get_object_orientation(self,obj):
         err,ori = vrep.simxGetObjectOrientation(self.clientId,obj,-1,vrep.simx_opmode_blocking)
         return ori
     
     def set_target_pos(self,pos):
+        print('set',pos)
         self.target_pos = pos
         vrep.simxSetObjectPosition(self.clientId,self.target,-1,pos,self.vrep_mode)
     
@@ -157,50 +159,86 @@ class PlaneCotroller:
     #=============================================================#
 
     def get_camera_pic(self,camera_pos):
+        img = None
         if camera_pos == 1:
-            return util.save_pic('zed_vision1',self.clientId)
+            img = util.save_pic('zed_vision1',self.clientId)
+            while(img is None):
+                img = util.save_pic('zed_vision1',self.clientId)
         else:
-            return util.save_pic('zed_vision0',self.clientId)
+            img = util.save_pic('zed_vision0',self.clientId)
+            while(img is None):
+                img = util.save_pic('zed_vision0',self.clientId)
+        return img
 
     #hard means this move requires high currency
-    def to_height(self,h):
-        if(self.check_target_pos()):
+    def to_height(self,h,max_v=0.2,t=-1):
+        self.move_to([self.plane_pos[0],self.plane_pos[1],h],max_v=max_v,t=t)
+        self.plane_pos[2] = h
+
+    def move_horizontally(self,x,y,hard=True):
+        self.move_to([x,y,self.plane_pos[2]],hard)
+
+    def stable_move(self,delta_x,delta_y):
+        self.set_target_pos([self.target_pos[0] + delta_x,self.target_pos[1] + delta_y,self.target_pos[2]])
+        self.plane_pos[0] += delta_x
+        self.plane_pos[1] += delta_y
+        time.sleep(5)
+        v1 = [1,1,1]
+        while(self.get_delta(v1,[0,0,0]) > 0.02):
+            time.sleep(0.5)
+            err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
+
+    def move_to(self,dest,hard = True,max_v = 0.02,t=-1):
+        delta = [0,0,0]
+        delta[0] = dest[0] - self.plane_pos[0]
+        delta[1] = dest[1] - self.plane_pos[1]
+        delta[2] = dest[2] - self.plane_pos[2]
+        print(self.plane_pos,delta,dest,self.target_pos)
+        self.set_target_pos([self.target_pos[0] + delta[0],self.target_pos[1] + delta[1],self.target_pos[2] + delta[2]])
+        if(t != -1):
+            print(t)
+            time.sleep(t)
             return
-        self.target_pos[2] = h
-        self.move_to(self.target_pos,False)
+        time.sleep(5)
+        v1 = [1,1,1]
+        if(not hard):
+            max_v = 0.05
+        while(self.get_delta(v1,[0,0,0]) > max_v):
+            time.sleep(0.5)
+            err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
+        self.plane_pos = dest
+        # time.sleep(3)
+        # v1 = [1,1,1]
+        # if hard:
+        #     while(self.get_delta(v1,[0,0,0]) > 0.01):
+        #         time.sleep(0.5)
+        #         err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
+        #     print('correcting current pos...')
+        #     cur = self.get_object_pos(self.copter)
+        #     target_pos = self.target_pos
+        #     delta = [0,0,0]
+        #     delta[0] = dest[0] - cur[0]
+        #     delta[1] = dest[1] - cur[1]
+        #     delta[2] = dest[2] - cur[2]
+        #     print('delta',delta)
+        #     target_pos[0] += delta[0]
+        #     target_pos[1] += delta[1]
+        #     target_pos[2] += delta[2]
+        #     self.set_target_pos(target_pos)
+        #     time.sleep(5)
+        #     err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
+        #     while(self.get_delta(v1,[0,0,0]) > 0.01):
+        #         time.sleep(0.5)
+        #         err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
+        #     # print(self.get_current_pos())
+        #     print("arrive")
+        #     # time.sleep(10)
+        # else:
+        #     while(self.get_delta(v1,[0,0,0]) > 0.05):
+        #         time.sleep(0.5)
+        #         err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
+        #         self.plane_pos[0] -= 0.19
 
-    def move_horizontally(self,x,y):
-        if(self.check_target_pos()):
-            return
-        self.target_pos[0] = x
-        self.target_pos[1] = y
-        self.move_to(self.target_pos)
-
-    def move_to(self,dest,hard = True):
-        self.set_target_pos(dest)
-        time.sleep(3)
-        err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
-        if hard:
-            while(self.get_delta(v1,[0,0,0]) > 0.01):
-                time.sleep(0.5)
-                err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
-            cur = self.get_object_pos(self.copter)
-            target_pos = self.get_target_pos()
-            delta = [0,0,0]
-            delta[0] = dest[0] - cur[0]
-            delta[1] = dest[1] - cur[1]
-            delta[2] = dest[2] - cur[2]
-            target_pos[0] += delta[0]
-            target_pos[1] += delta[1]
-            target_pos[2] += delta[2]
-            self.set_target_pos(target_pos)
-            time.sleep(5)
-        else:
-            while(self.get_delta(v1,[0,0,0]) > 0.05):
-                time.sleep(0.5)
-                err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
-
-        # # print(self.target_pos)
         # dir = [dest[0] - self.target_pos[0],dest[1] - self.target_pos[1],dest[2] - self.target_pos[2]]
         # len = dir[0]*dir[0] + dir[1]*dir[1] + dir[2]*dir[2]
         # len = math.sqrt(len)
@@ -278,7 +316,6 @@ class PlaneCotroller:
         while(abs(ori[0] > 5.0/180.0*PI) or abs(ori[1] > 10.0/180.0*PI) or abs(ori[2] > 5.0/180.0*PI)):
             err,ori = vrep.simxGetObjectOrientation(self.clientId,self.copter,-1,self.vrep_mode)
         img2 = self.get_camera_pic(1)
-
         center1,size1 = util.find_target(img1)
         center2,size2 = util.find_target(img2)
 
@@ -295,74 +332,83 @@ class PlaneCotroller:
             err += 1
         return err,center,size
     
-    def get_target(self):
+    def grap_target(self):
+        self.loose_jacohand()
+        print('grap the target...')
         #goto platform
         self.to_height(2)
+
         platform_pos = self.get_target_platform_pos()
-        print(platform_pos)
         self.move_horizontally(platform_pos[0],platform_pos[1])
-        self.loose_jacohand()
+        print("arrive got position",platform_pos)
         self.rotate_to(0)
         err,center,size = self.get_target_info()
         while(err != 0):
-            #one vision blocked by one finger 
-            if(err == 1):
-                self.move_to([self.target_pos[0] - 0.2,self.target_pos[1],self.target_pos[2]])
-            #no target in visions
-            elif(err == 2):
-                self.up(0.5)
+            platform_pos = self.get_target_platform_pos()
+            self.move_horizontally(platform_pos[0],platform_pos[1])
             err,center,size = self.get_target_info()
         print('target found')
+        
+
         #---------------calculate target pos roughly-------------------
         print("height beyond target:",85/size[0],"target size:",size,"target center:",center)
         delta_pos = [0,0]
         delta_pos[1] = center[0] - 644
-        delta_pos[0] = center[1] - 380
-        delta_pos[0] /= 233.3333
-        delta_pos[1] /= 233.3333
+        delta_pos[0] = center[1] - 389
+        # print("delta",delta_pos,"delta indeed",[platform_pos[0] - 7.225,platform_pos[1]+10.425])
+        delta_pos[0] /= 450
+        delta_pos[1] /= 450
         print("move to directly above target",delta_pos)
-        self.move_to([self.target_pos[0] - delta_pos[0],self.target_pos[1] + delta_pos[1],self.target_pos[2]])
+        self.move_horizontally(self.plane_pos[0] - delta_pos[0],self.plane_pos[1] + delta_pos[1])
 
-
-        print("height beyond target:",85/size[0],"target size:",size,"target center:",center)
-        height = 85/size[0]
-        print("move up")
-        self.move_to([self.target_pos[0],self.target_pos[1],self.target_pos[2]+(3.0-height)])
-        time.sleep(3)
-
+        print('move down a little and calculate position')
+        self.to_height(1.5)
         #---------------calculate target pos-------------------
         err,center,size = self.get_target_info()
         print("height beyond target:",85/size[0],"target size:",size,"target center:",center)
         delta_pos = [0,0]
         delta_pos[1] = center[0] - 640
-        delta_pos[0] = center[1] - 380
-        delta_pos[0] /= 233.3333
-        delta_pos[1] /= 233.3333
+        delta_pos[0] = center[1] - 410
+        # print("delta",delta_pos,"delta indeed",[platform_pos[0] - 7.225,platform_pos[1]+10.425])
+        delta_pos[0] /= 630
+        delta_pos[1] /= 630
         print("move to directly above target",delta_pos)
-        self.move_to([self.target_pos[0] - delta_pos[0],self.target_pos[1] + delta_pos[1],self.target_pos[2]])
-        # time.sleep(5)
+        
+        target_x,target_y = self.plane_pos[0] - delta_pos[0],self.plane_pos[1] + delta_pos[1]
+        self.move_horizontally(self.plane_pos[0] - delta_pos[0],self.plane_pos[1] + delta_pos[1])
+
+        time.sleep(5)
         print("move down")
-        self.move_to([self.target_pos[0],self.target_pos[1],self.target_pos[2]-2.1])
+        self.to_height(0.75)
         err,center,size = self.get_target_info()
-        print("height beyond target:",85/size[0],"target size:",size,"target center:",center)
         delta_pos = [0,0]
-        delta_pos[1] = center[0] - 660
-        delta_pos[0] = center[1] - 440
-        delta_pos[0] /= 875
-        delta_pos[1] /= 875
-
-        height = 85/size[0]
-        self.move_to([self.target_pos[0] - delta_pos[0],self.target_pos[1] + delta_pos[1],self.target_pos[2]])
-        time.sleep(3)
-
-        self.move_to([self.target_pos[0] ,self.target_pos[1],self.target_pos[2]-0.9+0.27])
-
+        delta_pos[0] = center[0] - 640
+        delta_pos[1] = center[1] - 500
+        while(abs(delta_pos[1]) > 30 or abs(delta_pos[0]) > 30 or err != 0):
+            print(delta_pos,err,center)
+            if(err != 0):
+                self.stable_move(-0.03,0)
+            else:
+                x = 0
+                y = 0
+                if(delta_pos[1] > 30):
+                    x = -0.03
+                elif(delta_pos[1] < -30):
+                    x = 0.03
+                if(delta_pos[0] > 30):
+                    y = 0.03
+                elif(delta_pos[0] < -30):
+                    y = -0.03
+                self.stable_move(x,y)
+            err,center,size = self.get_target_info()
+            delta_pos[0] = center[0] - 640
+            delta_pos[1] = center[1] - 500
+        self.to_height(0.45,t=7)
         self.grap_jacohand()
-        time.sleep(1)
-        self.move_to([self.target_pos[0],self.target_pos[1],self.target_pos[2]+1])
-        self.check_target_pos()
-
-
+        time.sleep(2.5)
+        self.to_height(1.5)
+        time.sleep(10)
+        self.plane_pos = self.get_object_pos(self.copter)
 
 
 class MainController:
@@ -380,9 +426,9 @@ class MainController:
     def startSimulation(self):
         if self.clientId!=-1:
             #+++++++++++++++++++++++++++++++++++++++++++++
-            # step = 0.005
-            # vrep.simxSetFloatingParameter(self.clientId, vrep.sim_floatparam_simulation_time_step, step, vrep.simx_opmode_oneshot)
-            # vrep.simxSynchronous(self.clientId, True)
+            step = 0.005
+            vrep.simxSetFloatingParameter(self.clientId, vrep.sim_floatparam_simulation_time_step, step, vrep.simx_opmode_oneshot)
+            vrep.simxSynchronous(self.clientId, True)
             vrep.simxStartSimulation(self.clientId,vrep.simx_opmode_oneshot)
             #init the controller
             planeController = PlaneCotroller(self.clientId)
@@ -390,11 +436,14 @@ class MainController:
             self.pdController = controller.PID(cid=self.clientId)
 
             #create a thread to controll the move of quadcopter
-            thread.start_new_thread(self.pdThread,())
+            _thread.start_new_thread(self.pdThread,())
             print("thread created")
             #to be stable
+            planeController.loose_jacohand()
             planeController.move_to(planeController.get_object_pos(planeController.copter),False)
-            # time.sleep(3)
+            time.sleep(10)
+            planeController.plane_pos = planeController.get_object_pos(planeController.copter)
+            time.sleep(10)
             self.run_simulation(planeController)
         else:
             print ('Failed connecting to remote API server')
@@ -405,14 +454,23 @@ class MainController:
     #                 simulation runs here                        #
     #=============================================================#
     def run_simulation(self,planeController):
+        # while(True):
+        #     None
         print("run simulation")
-        planeController.move_to([7.225,-10.425,3])
-        print(planeController.get_target_info())
+        # planeController.move_to([7.225,-10.425,0.75])
+        # # 640 389 32 22
+        # print(planeController.get_target_info())
+        # planeController.move_to([7.225,-10.425,2])
+        # #644 389 46 26
+        # print(planeController.get_target_info())
 
-        planeController.move_to([7.225,-10.425,1])
-        print(planeController.get_target_info())
-        planeController.get_target()
+        # planeController.move_to([7.225,-10.425,1.5])
+        #640 410 73 41
+
+        # print(planeController.get_target_info())
+        planeController.grap_target()
         planeController.landing()
+        time.sleep(100)
 
 
 
