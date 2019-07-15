@@ -40,10 +40,9 @@ class MainController:
             print("thread created")
             #to be stable
             planeController.loose_jacohand()
-            planeController.move_to(planeController.get_object_pos(planeController.copter),False)
-            time.sleep(10)
-            planeController.plane_pos = planeController.get_object_pos(planeController.copter)
-            time.sleep(10)
+            planeController.move_to(planeController.get_object_pos(planeController.copter),True)
+            # planeController.plane_pos = planeController.get_object_pos(planeController.copter)
+            # time.sleep(10)
             self.run_simulation(planeController)
         else:
             print ('Failed connecting to remote API server')
@@ -57,20 +56,7 @@ class MainController:
         # while(True):
         #     None
         print("run simulation")
-        # planeController.move_to([7.225,-10.425,0.75])
-        # # 640 389 32 22
-        # print(planeController.get_target_info())
-        # planeController.move_to([7.225,-10.425,2])
-        # #644 389 46 26
-        # print(planeController.get_target_info())
-
-        # planeController.move_to([7.225,-10.425,1.5])
-        #640 410 73 41
-
-        # print(planeController.get_target_info())
-        planeController.grap_target()
-        planeController.landing()
-        time.sleep(100)
+        planeController.land_on_car()
 
 
 

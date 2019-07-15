@@ -2,12 +2,14 @@ import vrep
 import time
 import ctypes
 import numpy as np
-import time
+import math
 import pdb
 import cv2
 import array
+import QR_finder
 from PIL import Image
 import matplotlib.pyplot as plt
+
 
 def save_pic(vision_name,clientID):
     if clientID!=-1:
@@ -32,6 +34,7 @@ def save_pic(vision_name,clientID):
                     # now_time = time.time()
                     # new_image.save('./pic/'+str(now_time) + vision_name+'.jpg')
                     return new_image
+                # time.sleep(1)
         except:
             return None
 
@@ -64,11 +67,47 @@ def find_target(img):
             l,w = w,l
         return center,[l,w]
     else:
-        return None
-        # box = cv2.boxPoints(min_rect)
-        # print(box)
-        # drawRect(img,box[0],box[1],box[2],box[3],[0,0,0],1)
-    
-    # print('target',x,y,radius)
-    # return x,y,radius
+        return None,None
 
+def find_QR(image):
+    image = np.asarray(image)
+    image=QR_finder.reshape_image(image)
+    image,contours,hierachy=QR_finder.detecte(image)
+    box = QR_finder.find(image,contours,np.squeeze(hierachy))
+    if box is None:
+        center = None
+    else:
+        center = [(box[0][0] + box[1][0]) / 2, (box[1][1] + box[2][1]) / 2]
+    return center,box
+
+
+    # pix = img.load()
+    # width = img.size[0]
+    # height = img.size[1]
+    # maxx=0
+    # minx=100000
+    # maxy=0
+    # miny=100000
+    # maxd=0
+    # for x in range(width):
+    #     maxy2 = 0
+    #     miny2 = 100000
+    #     for y in range(height):
+    #         r, g, b = pix[x, y]
+    #         if r <= 0 and g <= 0 and b <= 0:
+    #                 maxx = max(maxx,x)
+    #                 minx = min(minx,x)
+    #                 maxy2 = max(maxy2,y)
+    #                 miny2 = min(miny2,y)
+    #     if maxy2 - miny2 < 10000 and maxy2 - miny2 > maxd :
+    #         maxd = maxy2 - miny2
+    #         maxy = maxy2
+    #         miny = miny2
+    # print(minx,maxx,miny,maxy)
+    # if (maxx + minx) / 2 > width or  (maxy + miny) / 2 > height:
+    #     return None
+    # else:
+    #     return [(maxx + minx) / 2, (maxy + miny) / 2]
+
+def calculate_height(delta_t):
+    return 1280.0*0.12/delta_t/2.0/math.tan(42.5/180.0*math.pi)
