@@ -5,6 +5,8 @@ function sysCall_init()
     j2=sim.getObjectHandle("JacoHand_finger3_motor1")
     j3=sim.getObjectHandle("JacoHand_finger3_motor2")
     ui=simGetUIHandle('JacoHand')
+    shape = sim.getObjectHandle('Target')
+    sim.setObjectInt32Parameter(shape,sim.shapeintparam_static,0)
     simSetUIButtonLabel(ui,0,sim.getObjectName(modelHandle))
     closingVel=-0.04
 end
@@ -20,6 +22,7 @@ function sysCall_actuation()
     closing=sim.boolAnd32(simGetUIButtonProperty(ui,20),sim.buttonproperty_isdown)~=0
     close_hand=sim.getScriptSimulationParameter(sim.handle_self,'close_hand')
     data=sim.getStringSignal("jacohand")
+
     if (data ~= nil) then
         vector=sim.unpackFloatTable(data)
         if(vector[1] == -1) then
@@ -63,13 +66,20 @@ function sysCall_actuation()
     --
      index=0
      while true do
+         if attachedShape ~= -1 then
+            break
+         end
          shape=sim.getObjects(index,sim.object_shape_type)
          if (shape==-1) then
              break
          end
-         if (sim.getObjectInt32Parameter(shape,sim.shapeintparam_static)==0) and (sim.getObjectInt32Parameter(shape,sim.shapeintparam_respondable)~=0) and (sim.checkProximitySensor(objectSensor,shape)==1) then
+         err,isstatic = sim.getObjectInt32Parameter(shape,sim.shapeintparam_static)
+         err,isRespeondable = sim.getObjectInt32Parameter(shape,sim.shapeintparam_respondable)
+         res,a,b = sim.checkProximitySensor(objectSensor,shape)
+         if (isstatic==0) and (isRespeondable~=0) and (res==1) then
              -- Ok, we found a non-static respondable shape that was detected
             attachedShape=shape
+            print('connect')
              -- Do the connection:
              sim.setObjectParent(attachedShape,connector,true)
              break
