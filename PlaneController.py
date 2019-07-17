@@ -79,7 +79,7 @@ class PlaneCotroller:
         return ori
     
     def set_target_pos(self,pos):
-        print('set',pos)
+        # print('set',pos)
         self.target_pos = pos
         vrep.simxSetObjectPosition(self.clientId,self.target,-1,pos,self.vrep_mode)
     
@@ -188,14 +188,24 @@ class PlaneCotroller:
             err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
 
     def move_to(self,dest,hard = True,max_v = 0.02,t=-1):
+        print('move to:',dest,'\tfrom',self.plane_pos)
         delta = [0,0,0]
         delta[0] = dest[0] - self.plane_pos[0]
         delta[1] = dest[1] - self.plane_pos[1]
         delta[2] = dest[2] - self.plane_pos[2]
-        print(self.plane_pos,delta,dest,self.target_pos)
+        #if dest is to far,to make sure move stably,split with 2-divide
+        length = delta[0]*delta[0] + delta[1] * delta[1] + delta[2]* delta[2]
+        length = math.sqrt(length)
+        if length > 3:
+            print('to far\tpath length:',length)
+            self.move_to([dest[0] - delta[0]/2.0,dest[1] - delta[1]/2.0,dest[2] -delta[2]/2.0],max_v=0.1)
+            self.move_to(dest,hard,max_v,t)
+            return
+        print('moving...\tpath length:',length)
+        # print(self.plane_pos,delta,dest,self.target_pos)
         self.set_target_pos([self.target_pos[0] + delta[0],self.target_pos[1] + delta[1],self.target_pos[2] + delta[2]])
         if(t != -1):
-            print(t)
+            # print(t)
             time.sleep(t)
             return
         time.sleep(5)
@@ -304,6 +314,11 @@ class PlaneCotroller:
                                         'my_get_target_platform_pos', [], [], [], bytearray(), vrep.simx_opmode_oneshot_wait)
         return target_platform_pos
 
+    def get_landing_platform_pos(self):
+        ret, _, target_platform_pos, _, _ = vrep.simxCallScriptFunction(self.clientId, 'util_funcs', vrep.sim_scripttype_customizationscript, 
+                                        'my_get_end_point_pos', [], [], [], bytearray(), vrep.simx_opmode_oneshot_wait)
+        return target_platform_pos
+
     def get_target_info(self):
         #try to be stable
         # err,ori = vrep.simxGetObjectOrientation(self.clientId,self.copter,-1,self.vrep_mode)
@@ -335,8 +350,6 @@ class PlaneCotroller:
             err += 1
         return err,center,size,util.calculate_height(abs(center1[0] - center2[0]))
     
-
-
 
     def grap_target(self):
         self.loose_jacohand()
@@ -409,21 +422,68 @@ class PlaneCotroller:
             err,center,size,height = self.get_target_info()
             delta_pos[0] = center[0] - 640
             delta_pos[1] = center[1] - 520
-        self.to_height(0.45,t=7)
+        self.to_height(0.43,t=7)
         self.grap_jacohand()
         time.sleep(2.5)
         self.to_height(1.5)
         time.sleep(10)
         self.plane_pos = self.get_object_pos(self.copter)
+    
+
+    def land_on_platform(self):
+        self.to_height(3)
+        platform_pos = self.get_landing_platform_pos()
+        print("platform:",platform_pos,self.plane_pos,self.target_pos)
+        self.move_horizontally(platform_pos[0],platform_pos[1])
+        self.rotate_to(0)
+        def find_platform():
+            img1 = self.get_camera_pic(0)
+            img2 = self.get_camera_pic(1)
+            x1,y1 = util.find_landing_platform(img1)
+            x2,y2 = util.find_landing_platform(img2)
+            while x1 == -1 or x2 == -1:
+                platform_pos = self.get_landing_platform_pos()
+                print("platform:",platform_pos,self.plane_pos,self.target_pos)
+                self.move_horizontally(platform_pos[0],platform_pos[1])
+                img1 = self.get_camera_pic(0)
+                img2 = self.get_camera_pic(1)
+                x1,y1 = util.find_landing_platform(img1)
+                x2,y2 = util.find_landing_platform(img2)
+            return (x1 + x2)/2,(y1 + y2)/2
+        platform_x,platform_y = find_platform()
+        delta_y = platform_x - 640
+        delta_x = platform_y - 385
+        delta_x /= 295.0
+        delta_y /= 295.0
+        self.move_horizontally(self.plane_pos[0] - delta_x,self.plane_pos[1] + delta_y)
+        self.to_height(1.4)
+        self.loose_jacohand()
+        time.sleep(10)
+        self.landing()
+
+
+        
 
     def land_on_car(self):
         self.to_height(3)
         wander_path = [[-2,0],[-2,3],[2,3],[2,0],[2,-3],[-2,-3]]
         cur_pos = 0
-        center,box = None,None
-        while(True):
+        err,center,box = -2,None,None
+        #wander and look for QR code
+        while(err == -2):
             self.move_horizontally(wander_path[cur_pos][1],wander_path[cur_pos][0])
-            center,box = util.find_QR(self.get_camera_pic(1))
-            print(center)
+            if wander_path[cur_pos][0] < 0:
+                img = self.get_camera_pic(1)
+            else:
+                img = self.get_camera_pic(0)
+            err,center,box = util.find_QR(img)
+            print(err,center)
             cur_pos += 1
             cur_pos %= 6
+        #if only a corner found
+        def calculate_pos(pos_in_pic):
+            return 
+        if err == -1:
+            #move to derectly above the corner and find QR
+            None
+        #move to derectly above QR and see how it moves

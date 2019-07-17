@@ -95,7 +95,14 @@ def find(image,contours,hierachy,root=0):
     '''计算得到所有在比例上符合要求的轮廓中心点'''
     i,j,k=juge_angle(rec)
     if i==-1 or j== -1 or k==-1:
-        return None
+        if i == -1 and j == -1 and k == -1:
+            return -2,None
+        if i != -1:
+            return -1,contours[rec[i][6]]
+        if j != -1:
+            return -1,contours[rec[j][6]]
+        if k != -1:
+            return -1,contours[rec[k][6]]
     ts = np.concatenate((contours[rec[i][6]], contours[rec[j][6]], contours[rec[k][6]]))
     rect = cv2.minAreaRect(ts)
     box = cv2.boxPoints(rect)
@@ -103,15 +110,15 @@ def find(image,contours,hierachy,root=0):
     result=copy.deepcopy(image)
     print((box[0][0] + box[1][0]) / 2)
     print((box[1][1] + box[2][1]) / 2)
-    cv2.drawContours(result, [box], 0, (0, 0, 255), 2)
-    cv2.drawContours(image,contours,rec[i][6],(255,0,0),2)
-    cv2.drawContours(image,contours,rec[j][6],(255,0,0),2)
-    cv2.drawContours(image,contours,rec[k][6],(255,0,0),2)
+    # cv2.drawContours(result, [box], 0, (0, 0, 255), 2)
+    # cv2.drawContours(image,contours,rec[i][6],(255,0,0),2)
+    # cv2.drawContours(image,contours,rec[j][6],(255,0,0),2)
+    # cv2.drawContours(image,contours,rec[k][6],(255,0,0),2)
     # cv2.imshow('img0',image)
     # cv2.waitKey(0)
     # cv2.imshow('img1',result)
     # cv2.waitKey(0)
-    return box
+    return 0,box
 if __name__ == '__main__':
     image = cv2.imread("1.png")
     image=reshape_image(image)

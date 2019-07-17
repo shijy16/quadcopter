@@ -41,7 +41,7 @@ class MainController:
             #to be stable
             planeController.loose_jacohand()
             planeController.move_to(planeController.get_object_pos(planeController.copter),True)
-            # planeController.plane_pos = planeController.get_object_pos(planeController.copter)
+            planeController.plane_pos = planeController.get_object_pos(planeController.copter)
             # time.sleep(10)
             self.run_simulation(planeController)
         else:
@@ -56,7 +56,11 @@ class MainController:
         # while(True):
         #     None
         print("run simulation")
-        planeController.land_on_car()
+        planeController.grap_target()
+        planeController.to_height(5)
+        planeController.move_to([-7,8,5])
+        planeController.land_on_platform()
+        # planeController.land_on_car()
 
 
 

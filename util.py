@@ -69,16 +69,55 @@ def find_target(img):
     else:
         return None,None
 
+
+def find_landing_platform(image):
+    image = np.asarray(image)
+
+    # 由于霍夫圆检测对噪声敏感，这里用 均值偏移滤波 移除噪声
+    # pyrMeanShiftFiltering(src, sp, sr[, dst[, maxLevel[, termcrit]]]) -> dst
+    # 1 data 2 空间窗半径 3 色彩窗半径
+    dst = cv2.pyrMeanShiftFiltering(image, 10, 100)
+    #kernel = np.ones([5, 5], np.float32)/25   #除以25是防止数值溢出 
+    #dst = cv.filter2D(image, -1, kernel)
+    gaussian_blur = cv2.GaussianBlur(dst,(3,3),0) # 该算法对噪声敏感，必须降噪
+    # cv2.imshow('0', gaussian_blur)
+    cimage = cv2.cvtColor(gaussian_blur, cv2.COLOR_BGR2GRAY)  
+    # cv2.imshow('1', cimage)
+    edges = cv2.Canny(cimage, 70, 220)
+    # cv2.imshow('2', edges)
+
+    circles = cv2.HoughCircles(cimage, cv2.HOUGH_GRADIENT, 1, 20, param1=50, param2=30, minRadius=0, maxRadius=0)
+    # if circles is None:
+    #     return None,None
+    circles = np.uint16(np.around(circles)) # 把类型换成整数
+    max = 0
+    x = -1
+    y = -1
+    for i in circles[0, :]: # return (a,b,r)
+        cv2.circle(image, (i[0], i[1]), i[2], (0, 0, 255), 2)
+        cv2.circle(image, (i[0], i[1]), 2, (255, 0, 255), 2) # 画出小圆心
+        if (i[2] > max):
+            max = i[2]
+            x = i[0]
+            y = i[1]
+    # cv2.imshow("Result", image)
+    # cv2.waitKey(0)
+    # print(i[0],[1])
+    return x,y
+
+#err = -2:a corner detected
+#err = -1:not found
+#err = 0:QR found
 def find_QR(image):
     image = np.asarray(image)
     image=QR_finder.reshape_image(image)
     image,contours,hierachy=QR_finder.detecte(image)
-    box = QR_finder.find(image,contours,np.squeeze(hierachy))
+    err,box = QR_finder.find(image,contours,np.squeeze(hierachy))
     if box is None:
         center = None
     else:
         center = [(box[0][0] + box[1][0]) / 2, (box[1][1] + box[2][1]) / 2]
-    return center,box
+    return err,center,box
 
 
     # pix = img.load()
