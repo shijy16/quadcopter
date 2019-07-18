@@ -187,7 +187,7 @@ class PlaneCotroller:
             time.sleep(0.5)
             err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
 
-    def move_to(self,dest,hard = True,max_v = 0.02,t=-1):
+    def move_to(self,dest,hard = True,max_v = 0.5,t=-1):
         print('move to:',dest,'\tfrom',self.plane_pos)
         delta = [0,0,0]
         delta[0] = dest[0] - self.plane_pos[0]

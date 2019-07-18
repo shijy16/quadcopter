@@ -8,6 +8,8 @@ import util
 import controller
 import _thread
 from PlaneController import PlaneCotroller
+import best_way
+import Circle
 PI = 3.1415926
 
 
@@ -15,7 +17,7 @@ class MainController:
     def __init__(self, *args, **kwargs):
         print ('Program started')
         vrep.simxFinish(-1) # just in case, close all opened connections
-        self.clientId=vrep.simxStart('127.0.0.1',19997,True,True,5000,5) # Connect to V-REP, set a very large time-out for blocking commands
+        self.clientId=vrep.simxStart('127.0.0.1',20000,True,True,5000,5) # Connect to V-REP, set a very large time-out for blocking commands
     
     def pdThread(self):
         while(True):
@@ -42,7 +44,7 @@ class MainController:
             planeController.loose_jacohand()
             planeController.move_to(planeController.get_object_pos(planeController.copter),True)
             planeController.plane_pos = planeController.get_object_pos(planeController.copter)
-            # time.sleep(10)
+            time.sleep(10)
             self.run_simulation(planeController)
         else:
             print ('Failed connecting to remote API server')
@@ -56,9 +58,16 @@ class MainController:
         # while(True):
         #     None
         print("run simulation")
+        # time.sleep(10)
         planeController.grap_target()
-        planeController.to_height(5)
-        planeController.move_to([-7,8,5])
+        #get best way base on road
+        length,road = best_way.get_best_road()
+        road = Circle.get_new_road(road)
+        for i in road:
+            # print(i)
+            planeController.move_to([i[0],i[1],i[2]*1.5],True)
+        # planeController.to_height(5)
+        # planeController.move_to([-7,8,5])
         planeController.land_on_platform()
         # planeController.land_on_car()
 
