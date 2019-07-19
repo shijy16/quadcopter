@@ -17,7 +17,7 @@ class MainController:
     def __init__(self, *args, **kwargs):
         print ('Program started')
         vrep.simxFinish(-1) # just in case, close all opened connections
-        self.clientId=vrep.simxStart('127.0.0.1',20000,True,True,5000,5) # Connect to V-REP, set a very large time-out for blocking commands
+        self.clientId=vrep.simxStart('127.0.0.1',19997,True,True,5000,5) # Connect to V-REP, set a very large time-out for blocking commands
     
     def pdThread(self):
         while(True):
@@ -41,7 +41,7 @@ class MainController:
             _thread.start_new_thread(self.pdThread,())
             print("thread created")
             #to be stable
-            planeController.grap_jacohand()
+            planeController.loose_jacohand()
             planeController.move_to(planeController.get_object_pos(planeController.copter),True)
             planeController.plane_pos = planeController.get_object_pos(planeController.copter)
             time.sleep(10)
@@ -58,15 +58,17 @@ class MainController:
         # while(True):
         #     None
         print("run simulation")
+        self.mission2(planeController)
+
+    def mission2(self,planeController):
         planeController.grap_target()
         #get best way base on road
         length,road = best_way.get_best_road()
         road = Circle.get_new_road(road)
         for i in road:
-            planeController.move_to([i[0],i[1],i[2]*1.5],True)
+            planeController.move_to([i[0],i[1],i[2]*1.5],False)
 
         planeController.land_on_platform()
-
 
 
 mainController = MainController()
