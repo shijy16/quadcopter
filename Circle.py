@@ -1,5 +1,7 @@
 import math
 from decimal import Decimal
+import numpy as np
+from scipy import interpolate
 
 Multip = 2
 
@@ -18,6 +20,26 @@ def get_new_road(road):
     #     print('hello '+str(i))
     return result_list
 
+def get_h_line(point_list,p_num):
+    x = []
+    y = []
+    for i in point_list:
+        x.append(i[1])
+        y.append(i[0])
+    x = np.array(x)
+    y = np.array(y)
+    xx = np.linspace(x.min(), x.max(), p_num)
+    zz = []
+    for i in range(p_num):
+        a = int(i*len(point_list)/p_num)
+        zz.append(point_list[a][2])
+    li = interpolate.interp1d(x,y,kind = "quadratic")
+    yy = li(xx)
+    result = []
+    for i in range(len(xx)):
+        a = [yy[i],xx[i],zz[i]]
+        result.append(a)
+    return result
 
 def temp_new_way(x1,x2,obs_list,result_list):
     result_list.append(x1)

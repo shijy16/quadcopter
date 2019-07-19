@@ -17,7 +17,7 @@ class MainController:
     def __init__(self, *args, **kwargs):
         print ('Program started')
         vrep.simxFinish(-1) # just in case, close all opened connections
-        self.clientId=vrep.simxStart('127.0.0.1',19997,True,True,5000,5) # Connect to V-REP, set a very large time-out for blocking commands
+        self.clientId=vrep.simxStart('127.0.0.1',20000,True,True,5000,5) # Connect to V-REP, set a very large time-out for blocking commands
     
     def pdThread(self):
         while(True):
@@ -65,8 +65,9 @@ class MainController:
         #get best way base on road
         length,road = best_way.get_best_road()
         road = Circle.get_new_road(road)
+        road = Circle.get_h_line(road,9)
         for i in road:
-            planeController.move_to([i[0],i[1],i[2]*1.5],False)
+            planeController.move_to([i[0],i[1],i[2]*1.5],max_v = 0.8)
 
         planeController.land_on_platform()
 
