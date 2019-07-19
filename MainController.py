@@ -8,6 +8,7 @@ import util
 import controller
 import _thread
 from PlaneController import PlaneCotroller
+import util
 PI = 3.1415926
 
 
@@ -39,7 +40,7 @@ class MainController:
             _thread.start_new_thread(self.pdThread,())
             print("thread created")
             #to be stable
-            planeController.loose_jacohand()
+            planeController.grap_jacohand()
             planeController.move_to(planeController.get_object_pos(planeController.copter),True)
             planeController.plane_pos = planeController.get_object_pos(planeController.copter)
             # time.sleep(10)
@@ -56,11 +57,9 @@ class MainController:
         # while(True):
         #     None
         print("run simulation")
-        planeController.grap_target()
-        planeController.to_height(5)
-        planeController.move_to([-7,8,5])
-        planeController.land_on_platform()
         # planeController.land_on_car()
+        # planeController.grap_target()
+        planeController.land_on_platform()
 
 
 

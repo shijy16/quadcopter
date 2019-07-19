@@ -22,7 +22,7 @@ def detecte(image):
     '''提取所有轮廓'''
     gray=cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
     _,gray=cv2.threshold(gray,0,255,cv2.THRESH_OTSU+cv2.THRESH_BINARY_INV)
-    contours,hierachy=cv2.findContours(gray,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    img,contours,hierachy=cv2.findContours(gray,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
     return image,contours,hierachy
 
 def compute_1(contours,i,j):
@@ -94,28 +94,26 @@ def find(image,contours,hierachy,root=0):
                     rec.append([cx1,cy1,cx2,cy2,cx3,cy3,i,child,child_child])
     '''计算得到所有在比例上符合要求的轮廓中心点'''
     i,j,k=juge_angle(rec)
+    # print(i,j,k)
     if i==-1 or j== -1 or k==-1:
-        if i == -1 and j == -1 and k == -1:
-            return -2,None
-        if i != -1:
-            return -1,contours[rec[i][6]]
-        if j != -1:
-            return -1,contours[rec[j][6]]
-        if k != -1:
-            return -1,contours[rec[k][6]]
+        print('find failed... rec',rec)
+        return -2,None
+    
     ts = np.concatenate((contours[rec[i][6]], contours[rec[j][6]], contours[rec[k][6]]))
     rect = cv2.minAreaRect(ts)
     box = cv2.boxPoints(rect)
     box = np.int0(box)
     result=copy.deepcopy(image)
-    print((box[0][0] + box[1][0]) / 2)
-    print((box[1][1] + box[2][1]) / 2)
+    # print((box[0][0] + box[1][0]) / 2)
+    # print((box[1][1] + box[2][1]) / 2)
     # cv2.drawContours(result, [box], 0, (0, 0, 255), 2)
-    # cv2.drawContours(image,contours,rec[i][6],(255,0,0),2)
-    # cv2.drawContours(image,contours,rec[j][6],(255,0,0),2)
-    # cv2.drawContours(image,contours,rec[k][6],(255,0,0),2)
-    # cv2.imshow('img0',image)
-    # cv2.waitKey(0)
+    # cv2.circle(result,(int((box[0][0] + box[2][0]) / 2), int((box[1][1] + box[0][1]) / 2)),2,(255,0,255),2)
+
+    # # cv2.drawContours(image,contours,rec[i][6],(255,0,0),2)
+    # # cv2.drawContours(image,contours,rec[j][6],(255,0,0),2)
+    # # cv2.drawContours(image,contours,rec[k][6],(255,0,0),2)
+    # # cv2.imshow('img0',image)
+    # # cv2.waitKey(0)
     # cv2.imshow('img1',result)
     # cv2.waitKey(0)
     return 0,box

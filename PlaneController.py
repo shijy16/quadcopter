@@ -5,6 +5,7 @@ import time
 import math
 import gearControl
 import util
+from sklearn.svm import SVC
 
 PI = 3.1415926
 
@@ -174,8 +175,8 @@ class PlaneCotroller:
         self.move_to([self.plane_pos[0],self.plane_pos[1],h],max_v=max_v,t=t)
         self.plane_pos[2] = h
 
-    def move_horizontally(self,x,y,hard=True):
-        self.move_to([x,y,self.plane_pos[2]],hard)
+    def move_horizontally(self,x,y,hard=True,max_v=0.02):
+        self.move_to([x,y,self.plane_pos[2]],hard=hard,max_v=max_v)
 
     def stable_move(self,delta_x,delta_y):
         self.set_target_pos([self.target_pos[0] + delta_x,self.target_pos[1] + delta_y,self.target_pos[2]])
@@ -372,13 +373,13 @@ class PlaneCotroller:
         #---------------calculate target pos roughly-------------------
         print("height beyond target:",85/size[0],"target size:",size,"target center:",center)
         delta_pos = [0,0]
-        delta_pos[1] = center[0] - 644
+        delta_pos[1] = center[0] - 640
         delta_pos[0] = center[1] - 389
         # print("delta",delta_pos,"delta indeed",[platform_pos[0] - 7.225,platform_pos[1]+10.425])
         delta_pos[0] /= 450
         delta_pos[1] /= 450
         print("move to directly above target",delta_pos)
-        self.move_horizontally(self.plane_pos[0] - delta_pos[0],self.plane_pos[1] + delta_pos[1])
+        self.move_horizontally(self.plane_pos[0] - delta_pos[0],self.plane_pos[1] - delta_pos[1])
 
         print('move down a little and calculate position')
         self.to_height(1.5)
@@ -393,8 +394,8 @@ class PlaneCotroller:
         delta_pos[1] /= 630
         print("move to directly above target",delta_pos)
         
-        target_x,target_y = self.plane_pos[0] - delta_pos[0],self.plane_pos[1] + delta_pos[1]
-        self.move_horizontally(self.plane_pos[0] - delta_pos[0],self.plane_pos[1] + delta_pos[1])
+        target_x,target_y = self.plane_pos[0] - delta_pos[0],self.plane_pos[1] - delta_pos[1]
+        self.move_horizontally(self.plane_pos[0] - delta_pos[0],self.plane_pos[1] - delta_pos[1])
 
         time.sleep(5)
         print("move down")
@@ -402,7 +403,7 @@ class PlaneCotroller:
         err,center,size,height = self.get_target_info()
         delta_pos = [0,0]
         delta_pos[0] = center[0] - 640
-        delta_pos[1] = center[1] - 520
+        delta_pos[1] = center[1] - 500
         while(abs(delta_pos[1]) > 30 or abs(delta_pos[0]) > 30 or err != 0):
             print(delta_pos,err,center)
             if(err != 0):
@@ -415,28 +416,30 @@ class PlaneCotroller:
                 elif(delta_pos[1] < -30):
                     x = 0.03
                 if(delta_pos[0] > 30):
-                    y = 0.03
-                elif(delta_pos[0] < -30):
                     y = -0.03
+                elif(delta_pos[0] < -30):
+                    y = 0.03
                 self.stable_move(x,y)
             err,center,size,height = self.get_target_info()
             delta_pos[0] = center[0] - 640
             delta_pos[1] = center[1] - 520
         self.to_height(0.43,t=7)
         self.grap_jacohand()
-        time.sleep(2.5)
+        time.sleep(1.5)
         self.to_height(1.5)
         time.sleep(10)
         self.plane_pos = self.get_object_pos(self.copter)
     
-
+    #land on platfoem E
     def land_on_platform(self):
         self.to_height(3)
-        platform_pos = self.get_landing_platform_pos()
-        print("platform:",platform_pos,self.plane_pos,self.target_pos)
-        self.move_horizontally(platform_pos[0],platform_pos[1])
         self.rotate_to(0)
+
         def find_platform():
+            platform_pos = self.get_landing_platform_pos()
+            print("platform:",platform_pos,self.plane_pos,self.target_pos)
+            self.move_horizontally(platform_pos[0],platform_pos[1])
+
             img1 = self.get_camera_pic(0)
             img2 = self.get_camera_pic(1)
             x1,y1 = util.find_landing_platform(img1)
@@ -449,41 +452,128 @@ class PlaneCotroller:
                 img2 = self.get_camera_pic(1)
                 x1,y1 = util.find_landing_platform(img1)
                 x2,y2 = util.find_landing_platform(img2)
+                print(x1,y1,x2,y2)
+                if x1 == -1:
+                    x1 = x2
+                    y1 = y2
+                if x2 == -1:
+                    x2 = x1
+                    y2 = y1
             return (x1 + x2)/2,(y1 + y2)/2
         platform_x,platform_y = find_platform()
+        while platform_x == -1:
+            print('not found')
+            platform_x,platform_y = find_platform()
         delta_y = platform_x - 640
         delta_x = platform_y - 385
         delta_x /= 295.0
         delta_y /= 295.0
-        self.move_horizontally(self.plane_pos[0] - delta_x,self.plane_pos[1] + delta_y)
+        self.move_horizontally(self.plane_pos[0] - delta_x,self.plane_pos[1] - delta_y)
         self.to_height(1.4)
+        self.landing()
         self.loose_jacohand()
         time.sleep(10)
-        self.landing()
 
 
         
 
     def land_on_car(self):
-        self.to_height(3)
-        wander_path = [[-2,0],[-2,3],[2,3],[2,0],[2,-3],[-2,-3]]
+        img0 = self.get_camera_pic(0)
+        img1 = self.get_camera_pic(1)
+        def calculate_pos(pos_in_pic):
+            delta_y = pos_in_pic[0] - 640
+            delta_x = pos_in_pic[1] - 380
+            print(delta_x,delta_y)
+            delta_x /= 160.0
+            delta_y /= 160.0
+            print('cur pos',self.plane_pos[0] - delta_x,self.plane_pos[1] + delta_y)
+            return self.plane_pos[0] - delta_x,self.plane_pos[1] + delta_y
+
+        self.to_height(4.5)
+        wander_path = [[-2,0],[0,0],[2,0]]
         cur_pos = 0
-        err,center,box = -2,None,None
+        img = self.get_camera_pic(0)
+        err,center,box = util.find_QR(img)
         #wander and look for QR code
         while(err == -2):
-            self.move_horizontally(wander_path[cur_pos][1],wander_path[cur_pos][0])
-            if wander_path[cur_pos][0] < 0:
-                img = self.get_camera_pic(1)
-            else:
-                img = self.get_camera_pic(0)
+            self.move_horizontally(wander_path[cur_pos][0],wander_path[cur_pos][1],max_v=0.05)
+            img = self.get_camera_pic(0)
             err,center,box = util.find_QR(img)
-            print(err,center)
+            print('finding QR:',err,center)
             cur_pos += 1
-            cur_pos %= 6
-        #if only a corner found
-        def calculate_pos(pos_in_pic):
-            return 
-        if err == -1:
-            #move to derectly above the corner and find QR
-            None
-        #move to derectly above QR and see how it moves
+            cur_pos %= 3
+        QR_x,QR_y = calculate_pos(center)
+        self.move_horizontally(QR_x,QR_y)
+        img0 = self.get_camera_pic(0)
+        img1 = self.get_camera_pic(1)
+        err,center0,box = util.find_QR(img0)
+        #if lost
+        if err != 0:
+            print('****************target lost*************')
+            self.land_on_car()
+            return
+        err,center1,box = util.find_QR(img1)
+        #if lost
+        if err != 0:
+            print('****************target lost*************')
+            self.land_on_car()
+            return
+        center[0] = (center0[0] + center1[0])/2.0
+        center[1] = (center0[1] + center1[1])/2.0
+        QR_x,QR_y = calculate_pos(center)
+        self.move_horizontally(QR_x,QR_y,max_v=0.2)
+        def follow_car():
+            img0 = self.get_camera_pic(0)
+            img1 = self.get_camera_pic(1)
+            err1,center0,box = util.find_QR(img0)
+            err2,center1,box = util.find_QR(img1)
+            cnt = 0
+            if err1 == 0:
+                cnt += 1
+                center[0] = center0[0]
+                center[1] = center0[1]
+            if err2 == 0:
+                cnt += 1
+                center[0] += center1[0]
+                center[1] += center1[1]
+            if cnt == 0:
+                return None,None
+            center[0] /= cnt
+            center[1] /= cnt
+            return calculate_pos(center)
+        train_x = []
+        train_y = []
+        index = []
+        def train_and_pre(index,x,y,idx):
+            model_x = util.polynomial_model(degree=3)
+            model_x.fit(index, x)
+            model_y = util.polynomial_model(degree=3)
+            model_y.fit(index, y)
+            return model_x.predict([[idx]]),model_y.predict([[idx]])
+
+        last = time.clock()
+        for i in range(0,11):
+            print(time.clock() - last)
+            last = time.clock()
+            if len(train_x) < i -2:
+                print('lost')
+                self.land_on_car()
+                return
+            QR_x,QR_y = follow_car()
+            if QR_x is None:
+                print('lost and pre to try catching the car')
+                xx,yy = train_and_pre(index,train_x,train_y,i+2)
+                self.move_horizontally(xx,yy)
+                continue
+            train_x.append([QR_x])
+            train_y.append([QR_y])
+            index.append([i])
+        xx,yy = train_and_pre(index,train_x,train_y,19)
+        print('predict pos',xx,yy)
+        self.move_to([xx,yy,0.7],max_v=0.1)
+        print(time.clock() - last)
+        self.landing()
+        # print(train_x[10],train_y[10])
+ 
+
+        # time.sleep(50)
