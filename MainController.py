@@ -41,7 +41,7 @@ class MainController:
             _thread.start_new_thread(self.pdThread,())
             print("thread created")
             #to be stable
-            planeController.loose_jacohand()
+            planeController.grap_jacohand()
             planeController.move_to(planeController.get_object_pos(planeController.copter),True)
             planeController.plane_pos = planeController.get_object_pos(planeController.copter)
             time.sleep(10)
@@ -58,18 +58,14 @@ class MainController:
         # while(True):
         #     None
         print("run simulation")
-        # time.sleep(10)
         planeController.grap_target()
         #get best way base on road
         length,road = best_way.get_best_road()
         road = Circle.get_new_road(road)
         for i in road:
-            # print(i)
             planeController.move_to([i[0],i[1],i[2]*1.5],True)
-        # planeController.to_height(5)
-        # planeController.move_to([-7,8,5])
+
         planeController.land_on_platform()
-        # planeController.land_on_car()
 
 
 
