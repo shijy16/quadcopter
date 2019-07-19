@@ -199,7 +199,7 @@ class PlaneCotroller:
         length = math.sqrt(length)
         if length > 3:
             print('to far\tpath length:',length)
-            self.move_to([dest[0] - delta[0]/2.0,dest[1] - delta[1]/2.0,dest[2] -delta[2]/2.0],max_v=0.1)
+            self.move_to([dest[0] - delta[0]/2.0,dest[1] - delta[1]/2.0,dest[2] -delta[2]/2.0],max_v=0.15)
             self.move_to(dest,hard,max_v,t)
             return
         print('moving...\tpath length:',length)
@@ -212,7 +212,7 @@ class PlaneCotroller:
         time.sleep(5)
         v1 = [1,1,1]
         if(not hard):
-            max_v = 0.05
+            max_v = 0.1
         while(self.get_delta(v1,[0,0,0]) > max_v):
             time.sleep(0.5)
             err,v1,v2 = vrep.simxGetObjectVelocity(self.clientId,self.copter,self.vrep_mode)
@@ -470,8 +470,8 @@ class PlaneCotroller:
         delta_y /= 295.0
         self.move_horizontally(self.plane_pos[0] - delta_x,self.plane_pos[1] - delta_y)
         self.to_height(1.4)
-        self.landing()
-        self.loose_jacohand()
+        # self.landing()
+        # self.loose_jacohand()
         time.sleep(10)
 
 

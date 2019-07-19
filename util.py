@@ -91,8 +91,8 @@ def find_landing_platform(image):
     # cv2.imshow('2', edges)
 
     circles = cv2.HoughCircles(cimage, cv2.HOUGH_GRADIENT, 1, 20, param1=50, param2=30, minRadius=0, maxRadius=0)
-    # if circles is None:
-    #     return None,None
+    if circles is None:
+        return -1,-1
     circles = np.uint16(np.around(circles)) # 把类型换成整数
     max = 0
     x = -1
