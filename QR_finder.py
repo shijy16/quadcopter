@@ -21,10 +21,36 @@ def reshape_image(image):
 def detecte(image):
     '''提取所有轮廓'''
     gray=cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
-    _,gray=cv2.threshold(gray,0,255,cv2.THRESH_OTSU+cv2.THRESH_BINARY_INV)
+    # print(gray)
+    _,gray=cv2.threshold(gray,239,255,0)
     img,contours,hierachy=cv2.findContours(gray,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-    return image,contours,hierachy
-
+    cv2.imwrite('1.jpg',img)
+    # print(contours[0])
+    # c = np.asarray(c)
+    if len(contours) > 0: 
+        c = []
+        for i in contours:
+            for p in i:
+                c.append([p[0][0],p[0][1]])
+        c = np.asarray(c)
+        # c = max(contours, key = cv2.contourArea)
+        min_rect = cv2.minAreaRect(c)
+        center = min_rect[0]
+        # box = cv2.boxPoints(min_rect)
+        # image = cv2.rectangle(image, (box[0][0],box[0][1]),(box[2][0],box[2][1]), (0,0,255), 5)
+        # cv2.imshow('1',image)
+        # cv2.waitKey(0)
+        # cv2.imwrite('1.jpg',image)
+        w = min_rect[1][0]
+        l = min_rect[1][1]
+        #print ((box[0][0] + box[1][0] + box[2][0] + box[3][0]) / 4)
+        #print ((box[0][1] + box[1][1] + box[2][1] + box[3][1]) / 4)
+        if l < w:
+            l,w = w,l
+        return center,[l,w]
+    else:
+        return None,None
+        
 def compute_1(contours,i,j):
     '''最外面的轮廓和子轮廓的比例'''
     area1 = cv2.contourArea(contours[i])
@@ -79,6 +105,42 @@ def juge_angle(rec):
                     if abs(np.sqrt(np.square(distance_2)+np.square(distance_3))-distance_1)<5:
                         return i,j,k
     return -1,-1,-1
+
+def walk(img):
+    gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (9, 9),0)
+    gradX = cv2.Sobel(blurred, ddepth=cv2.CV_32F, dx=1, dy=0)
+    gradY = cv2.Sobel(blurred, ddepth=cv2.CV_32F, dx=0, dy=1)
+ 
+    gradient = cv2.subtract(gradX, gradY)
+    gradient = cv2.convertScaleAbs(gradient)
+    
+    blurred = cv2.GaussianBlur(gradient, (9, 9),0)
+    (_, thresh) = cv2.threshold(blurred, 90, 255, cv2.THRESH_BINARY)
+    # 建立一个椭圆核函数
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))
+    # 执行图像形态学, 细节直接查文档，很简单
+    closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+    closed = cv2.erode(closed, None, iterations=4)
+    closed = cv2.dilate(closed, None, iterations=4)
+    # 这里opencv3返回的是三个参数
+    (_, cnts, _) = cv2.findContours(closed.copy(), 
+        cv2.RETR_LIST, 
+        cv2.CHAIN_APPROX_SIMPLE)
+    if cnts == [] :
+        c = []
+    else:
+        c = sorted(cnts, key=cv2.contourArea, reverse=True)[0]
+    # compute the rotated bounding box of the largest contour
+    rect = cv2.minAreaRect(c)
+    box = np.int0(cv2.boxPoints(rect))
+    #print ((box[0][0] + box[1][0] + box[2][0] + box[3][0]) / 4)
+    #print ((box[0][1] + box[1][1] + box[2][1] + box[3][1]) / 4)
+    draw_img = drawcnts_and_cut(img, box)
+    # cv2.imshow('draw_img', draw_img)
+    #cv2.waitKey(0)
+    return (box[0][0] + box[1][0] + box[2][0] + box[3][0]) / 4, (box[0][1] + box[1][1] + box[2][1] + box[3][1]) / 4
+
 def find(image,contours,hierachy,root=0):
     '''找到符合要求的轮廓'''
     rec=[]
@@ -96,7 +158,6 @@ def find(image,contours,hierachy,root=0):
     i,j,k=juge_angle(rec)
     # print(i,j,k)
     if i==-1 or j== -1 or k==-1:
-        print('find failed... rec',rec)
         return -2,None
     
     ts = np.concatenate((contours[rec[i][6]], contours[rec[j][6]], contours[rec[k][6]]))
@@ -118,10 +179,11 @@ def find(image,contours,hierachy,root=0):
     # cv2.waitKey(0)
     return 0,box
 if __name__ == '__main__':
-    image = cv2.imread("1.png")
+    image = cv2.imread("1.jpg")
     image=reshape_image(image)
     # cv2.imshow('img', image)
     # cv2.waitKey(0)
-    image,contours,hierachy=detecte(image)
+    center,size=detecte(image)
+    print(center,size)
     #cv2.waitKey(0)
-    print(find(image,contours,np.squeeze(hierachy)))
+    # print(find(image,contours,np.squeeze(hierachy)))

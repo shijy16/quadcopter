@@ -28,6 +28,7 @@ class MainController:
     def startSimulation(self):
         if self.clientId!=-1:
             #+++++++++++++++++++++++++++++++++++++++++++++
+            use_ori = True
             step = 0.005
             vrep.simxSetFloatingParameter(self.clientId, vrep.sim_floatparam_simulation_time_step, step, vrep.simx_opmode_oneshot)
             vrep.simxSynchronous(self.clientId, True)
@@ -35,16 +36,15 @@ class MainController:
             #init the controller
             planeController = PlaneCotroller(self.clientId)
             planeController.take_off()
-            self.pdController = controller.PID(cid=self.clientId)
+            self.pdController = controller.PID(cid=self.clientId,ori_mode=use_ori)
 
             #create a thread to controll the move of quadcopter
             _thread.start_new_thread(self.pdThread,())
             print("thread created")
             #to be stable
             planeController.loose_jacohand()
-            planeController.move_to(planeController.get_object_pos(planeController.copter),True)
-            planeController.plane_pos = planeController.get_object_pos(planeController.copter)
-            time.sleep(10)
+            # planeController.move_to(planeController.get_object_pos(planeController.copter),True)
+            # planeController.plane_pos = planeController.get_object_pos(planeController.copter)
             self.run_simulation(planeController)
         else:
             print ('Failed connecting to remote API server')
@@ -58,7 +58,8 @@ class MainController:
         # while(True):
         #     None
         print("run simulation")
-        self.mission2(planeController)
+        
+        planeController.land_on_car()
 
     def mission2(self,planeController):
         planeController.grap_target()
