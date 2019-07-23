@@ -27,6 +27,7 @@ def save_pic(vision_name,clientID):
         try:
             err, camera1 = vrep.simxGetObjectHandle(clientID, vision_name,
                                                         vrep.simx_opmode_blocking )
+            print(err)
             # res,resolution,image=vrep.simxGetVisionSensorImage(clientID,camera1,0,vrep.simx_opmode_remove)
             res,resolution,image=vrep.simxGetVisionSensorImage(clientID,camera1,0,vrep.simx_opmode_streaming)
             print("getting pic...")
@@ -36,6 +37,7 @@ def save_pic(vision_name,clientID):
                     img = np.array(image, dtype = np.uint8)
                     img.resize([resolution[1],resolution[0],3])
                     img = cv2.flip(img,0)
+                    # cv2.imwrite('1.jpg',img)
                     print('ok')
                     return img
                 # time.sleep(1)
@@ -115,13 +117,9 @@ def find_landing_platform(image):
 def find_QR(image):
     # image = np.asarray(image)
     # image=QR_finder.reshape_image(image)
-    image,contours,hierachy=QR_finder.detecte(image)
-    err,box = QR_finder.find(image,contours,np.squeeze(hierachy))
-    if box is None:
-        center = None
-    else:
-        center = [(box[0][0] + box[1][0] + box[2][0] + box[3][0]) / 4.0, (box[0][1] + box[1][1] + box[2][1] + box[3][1]) / 4.0]
-    return err,center,box
+
+    center,size=QR_finder.detecte(image)
+    return center,size
 
 
     # pix = img.load()

@@ -51,9 +51,9 @@ class Quadcopter( object ):
     """
     def __init__( self, max_target_distance=4, noise=False,
                   noise_std=None, dodging=True,
-                  target_func=None, cid=None
+                  target_func=None, cid=None,ori_mode=False
                 ):
-
+        self.ori_mode = ori_mode
         # If a cid is specified, assume the connection has already been
         # established and should remain open
         if cid is None:
@@ -186,9 +186,13 @@ class Quadcopter( object ):
         sz = math.sin(self.ori[2])
         x_err = self.t_pos[0] - self.pos[0]
         y_err = self.t_pos[1] - self.pos[1]
-        self.pos_err = [ x_err * cz + y_err * sz, 
-                        -x_err * sz + y_err * cz, 
-                         self.t_pos[2] - self.pos[2]]
+        if not self.ori_mode:
+          self.pos_err = [ x_err * cz + y_err * sz, 
+                          -x_err * sz + y_err * cz, 
+                          self.t_pos[2] - self.pos[2]]
+        else:
+          self.pos_err = [0,0, 
+                          self.t_pos[2] - self.pos[2]]
         # print(self.pos_err)
         
         self.lin = [self.lin[0]*cz+self.lin[1]*sz, -self.lin[0]*sz+self.lin[1]*cz, self.lin[2]]
