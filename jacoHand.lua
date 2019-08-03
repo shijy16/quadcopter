@@ -45,11 +45,11 @@ function sysCall_actuation()
             sim.setJointTargetVelocity(j3,closingVel)
 
             -- You have basically 2 alternatives to grasp an object:
-            --
+            
             -- 1. You try to grasp it in a realistic way. This is quite delicate and sometimes requires
             --    to carefully adjust several parameters (e.g. motor forces/torques/velocities, friction
             --    coefficients, object masses and inertias)
-            --
+            
             -- 2. You fake the grasping by attaching the object to the gripper via a connector. This is
             --    much easier and offers very stable results.
             --

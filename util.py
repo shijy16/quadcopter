@@ -37,7 +37,7 @@ def save_pic(vision_name,clientID):
                     img = np.array(image, dtype = np.uint8)
                     img.resize([resolution[1],resolution[0],3])
                     img = cv2.flip(img,0)
-                    # cv2.imwrite('1.jpg',img)
+                    cv2.imwrite(str(time.time())+'.jpg',img)
                     print('ok')
                     return img
                 # time.sleep(1)

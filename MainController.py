@@ -10,6 +10,7 @@ import _thread
 from PlaneController import PlaneCotroller
 import best_way
 import Circle
+
 PI = 3.1415926
 
 
@@ -58,9 +59,11 @@ class MainController:
         # while(True):
         #     None
         print("run simulation")
-        
-        planeController.land_on_car()
+        self.mission1(planeController)
 
+    def mission1(self,planeController):
+        planeController.land_on_car()
+    
     def mission2(self,planeController):
         planeController.grap_target()
         #get best way base on road
@@ -70,6 +73,7 @@ class MainController:
             planeController.move_to([i[0],i[1],i[2]*1.5],False)
 
         planeController.land_on_platform()
+
 
 
 mainController = MainController()

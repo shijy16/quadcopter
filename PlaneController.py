@@ -101,9 +101,8 @@ class PlaneCotroller:
         self.move_with_ori(-vy/0.08,vx/0.08)
     
     def set_height(self,h):
-        cur_h = self.get_object_pos(self.copter)[2]
-        delta_h = h - cur_h
-        self.set_target_pos([0,0,self.target_pos[2] + delta_h])
+        print('set height',h)
+        self.set_target_pos([0,0,h])
         
     
     def get_target_orientation(self):
@@ -276,10 +275,8 @@ class PlaneCotroller:
         # self.up_gear()
 
     def landing(self):
-        # self.down_gear()
-        time.sleep(1)
-        self.send_power_commands(-3)
-        time.sleep(3)
+        self.send_power_commands(-1)
+        time.sleep(2)
         self.send_power_commands(-9)  
     
 
@@ -455,7 +452,7 @@ class PlaneCotroller:
         
         def calculate_pos(pos_in_pic,h=self.plane_pos[2]):
             h -= 0.25
-            delta_y = pos_in_pic[0] - 640
+            delta_y = pos_in_pic[0] - 600
             delta_x = pos_in_pic[1] - 450
             print(delta_x,delta_y)
             # delta_x /= 160.0
@@ -466,7 +463,9 @@ class PlaneCotroller:
             return self.plane_pos[0] - delta_x,self.plane_pos[1] - delta_y
         self.set_height(4.5)
         time.sleep(15)
-        target_v = 0.2
+        returnCode,target_v=vrep.simxGetFloatSignal(self.clientId,'carSpeed',vrep.simx_opmode_oneshot_wait)
+        target_v/=10.0
+        print('get speed',returnCode,target_v)
         wander_v = [-1,0]
         #wander and find car
         dir_x = 0
@@ -495,48 +494,67 @@ class PlaneCotroller:
         v_x = v*dir_x/dir_len
         v_y = v*dir_y/dir_len
         self.move_with_v(v_x,v_y)
-        # time.sleep(5)
-        last_len = dir_len
         def follow_car(dir_len,target_v):
             last_pos = None
             last_len = dir_len
+            car_pos = []
+            last_shot_time = vrep.simxGetLastCmdTime(self.clientId)
             while(True):
                 v = target_v
                 img = self.get_camera_pic(0)
+                shot_time = vrep.simxGetLastCmdTime(self.clientId)
                 center,size = util.find_QR(img)
                 if center is not None:
-                    if size[0] > 1200 and size[1] > 700:
-                        self.landing()
-                        break
                     target_pos = calculate_pos(center)
+                    car_pos.append(target_pos)
                     dir_x = target_pos[0] - self.plane_pos[0]
                     dir_y = target_pos[1] - self.plane_pos[1]
                     dir_len = math.sqrt(dir_x*dir_x + dir_y*dir_y)
-                    print('distance to car:',dir_len)
+                    # dir_x /= dir_len
+                    # dir_y /= dir_len
+                    if len(car_pos) > 1:
+                        car_x = car_pos[-1][0] - car_pos[-2][0]
+                        car_y = car_pos[-1][1] - car_pos[-2][1]
+                        # if size[0]/size[1] < 1.3 and size[0]/size[1] > 0.7:
+                            # target_v = math.sqrt(car_x*car_x + car_y*car_y)/((shot_time - last_shot_time)/1000.0)
+                            # print('car speed',target_v)
+                        dir_x += car_x
+                        dir_y += car_y
+                    last_shot_time = shot_time
+                    temp_len = math.sqrt(dir_x*dir_x + dir_y*dir_y)
+                    dir_x /= temp_len
+                    dir_y /= temp_len
                     self.plane_pos = self.get_object_pos(self.copter)
-                    if self.plane_pos[2] < 1.2:
-                        target_v*=1.1
     
-                    if abs(center[0] - 640) < 100 and abs(center[1] - 450) < 100:
-                        if self.target_pos[2] - 0.5 >= 1.2:
-                            self.set_height(self.target_pos[2]-0.5)
-                        else:
-                            self.set_height(1.2)
+                    if abs(center[0] - 600) < 200 and abs(center[1] - 450) < 200:
+                        if size[0] > 600 and size[1] > 500 and  abs(center[0] - 600) < 150 and abs(center[1] - 400) < 150:
+                            print('landing')
+                            # self.set_height(self.target_pos[2] - 0.5)
+                            self.landing()
+                            break
+                        if self.plane_pos[2] - 0.6 >= 1.2:
+                            self.set_height(self.target_pos[2]-0.6)
+                        elif self.plane_pos[2] - 0.2 >= 0.7:
+                            self.set_height(self.target_pos[2] - 0.2)
                     else:
-                        if dir_len < 0.15:
-                            v = target_v*1.2
-                        elif dir_len < 0.3:
-                            v = target_v*1.3
-                        elif dir_len < 1:
-                            v = target_v*1.7
+                        if self.plane_pos[2] < 1.2:
+                            if  abs(center[0] - 600) > 300 and abs(center[1] - 450) > 200:
+                                self.set_height(self.target_pos[2] + 0.4)
+                            v = target_v + 0.05
+                        elif dir_len < 0.15:
+                            v = target_v + 0.07
+                        elif dir_len < 0.5:
+                            v = target_v + 0.1
+                        elif dir_len < 1.5:
+                            v = target_v + 0.2
                         else:
-                            v = target_v*2.0
-                    v_x = v*dir_x/dir_len
-                    v_y = v*dir_y/dir_len
+                            v = target_v + 0.3
+                    v_x = v*dir_x
+                    v_y = v*dir_y
                     self.move_with_v(v_x,v_y)
                 else:
                     # print(center)
-                    time.sleep(10)
+                    time.sleep(5)
         follow_car(dir_len,target_v)
         time.sleep(20)
         
