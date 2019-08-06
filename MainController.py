@@ -8,8 +8,6 @@ import util
 import controller
 import _thread
 from PlaneController import PlaneCotroller
-import best_way
-import Circle
 PI = 3.1415926
 
 
@@ -28,7 +26,6 @@ class MainController:
     def startSimulation(self):
         if self.clientId!=-1:
             #+++++++++++++++++++++++++++++++++++++++++++++
-            use_ori = True
             step = 0.005
             vrep.simxSetFloatingParameter(self.clientId, vrep.sim_floatparam_simulation_time_step, step, vrep.simx_opmode_oneshot)
             vrep.simxSynchronous(self.clientId, True)
@@ -36,7 +33,7 @@ class MainController:
             #init the controller
             planeController = PlaneCotroller(self.clientId)
             planeController.take_off()
-            self.pdController = controller.PID(cid=self.clientId,ori_mode=use_ori)
+            self.pdController = controller.PID(cid=self.clientId,ori_mode=True)
 
             #create a thread to controll the move of quadcopter
             _thread.start_new_thread(self.pdThread,())
@@ -45,6 +42,7 @@ class MainController:
             planeController.loose_jacohand()
             # planeController.move_to(planeController.get_object_pos(planeController.copter),True)
             # planeController.plane_pos = planeController.get_object_pos(planeController.copter)
+            # time.sleep(10)
             self.run_simulation(planeController)
         else:
             print ('Failed connecting to remote API server')
@@ -58,18 +56,16 @@ class MainController:
         # while(True):
         #     None
         print("run simulation")
-        
-        planeController.land_on_car()
+        # planeController.move_with_v(1,0.0)
+        # while True:
+        #     continue
 
-    def mission2(self,planeController):
-        planeController.grap_target()
-        #get best way base on road
-        length,road = best_way.get_best_road()
-        road = Circle.get_new_road(road)
-        for i in road:
-            planeController.move_to([i[0],i[1],i[2]*1.5],False)
+        # planeController.initial_pos()
+        target = planeController.locate_target()
+        print("target = " + str(target))
+        planeController.follow_target(target)
+        planeController.landing()
 
-        planeController.land_on_platform()
 
 
 mainController = MainController()

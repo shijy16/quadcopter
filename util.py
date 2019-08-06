@@ -9,25 +9,12 @@ import array
 import QR_finder
 from PIL import Image
 import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.pipeline import Pipeline
-
-#linear model
-def polynomial_model(degree=1):
-    polynomial_features = PolynomialFeatures(degree=degree,
-                                             include_bias=False)
-    linear_regression = LinearRegression(normalize=True)  #normalize=True对数据归一化处理
-    pipeline = Pipeline([("polynomial_features", polynomial_features),#添加多项式特征
-                         ("linear_regression", linear_regression)])
-    return pipeline
-
+    
 def save_pic(vision_name,clientID):
     if clientID!=-1:
         try:
             err, camera1 = vrep.simxGetObjectHandle(clientID, vision_name,
                                                         vrep.simx_opmode_blocking )
-            print(err)
             # res,resolution,image=vrep.simxGetVisionSensorImage(clientID,camera1,0,vrep.simx_opmode_remove)
             res,resolution,image=vrep.simxGetVisionSensorImage(clientID,camera1,0,vrep.simx_opmode_streaming)
             print("getting pic...")
@@ -37,12 +24,14 @@ def save_pic(vision_name,clientID):
                     img = np.array(image, dtype = np.uint8)
                     img.resize([resolution[1],resolution[0],3])
                     img = cv2.flip(img,0)
-                    # cv2.imwrite('1.jpg',img)
                     print('ok')
+                    # cv2.imshow("name",img)
+                    # cv2.waitKey(0)
                     return img
                 # time.sleep(1)
         except:
             return None
+
 
 def drawRect(img, pt1, pt2, pt3, pt4, color, lineWidth):
     cv2.line(img, tuple(pt1), tuple(pt2), color, lineWidth)
@@ -54,7 +43,7 @@ def drawRect(img, pt1, pt2, pt3, pt4, color, lineWidth):
 
 def find_target(img):
     img_hsv = cv2.cvtColor(np.asarray(img),cv2.COLOR_RGB2HSV)
-    # img = np.asarray(img)
+    img = np.asarray(img)
     lower_red = np.array([0, 43, 46])
     upper_red = np.array([10, 255, 255])
     mask_red = cv2.inRange(img_hsv, lower_red, upper_red)
@@ -93,8 +82,8 @@ def find_landing_platform(image):
     # cv2.imshow('2', edges)
 
     circles = cv2.HoughCircles(cimage, cv2.HOUGH_GRADIENT, 1, 20, param1=50, param2=30, minRadius=0, maxRadius=0)
-    if circles is None:
-        return -1,-1
+    # if circles is None:
+    #     return None,None
     circles = np.uint16(np.around(circles)) # 把类型换成整数
     max = 0
     x = -1
@@ -115,11 +104,15 @@ def find_landing_platform(image):
 #err = -1:not found
 #err = 0:QR found
 def find_QR(image):
-    # image = np.asarray(image)
-    # image=QR_finder.reshape_image(image)
-
-    center,size=QR_finder.detecte(image)
-    return center,size
+    image = np.asarray(image)
+    image=QR_finder.reshape_image(image)
+    image,contours,hierachy=QR_finder.detecte(image)
+    err,box = QR_finder.find(image,contours,np.squeeze(hierachy))
+    if box is None:
+        center = None
+    else:
+        center = [(box[0][0] + box[1][0]) / 2, (box[1][1] + box[2][1]) / 2]
+    return err,center,box
 
 
     # pix = img.load()
